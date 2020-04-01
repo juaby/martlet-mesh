@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+  "data-panel",
+  "control-panel",
+
+  # Internal
+]
