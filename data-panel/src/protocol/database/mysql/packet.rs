@@ -1,4 +1,4 @@
-use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED};
+use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLColumnType};
 use crate::protocol::database::{PacketPayload, DatabasePacket};
 
 use rand::Rng;
@@ -135,6 +135,23 @@ impl MySQLPacketPayload {
             self.bytes_mut.get_uint_le(3)
         } else {
             self.bytes_mut.get_uint_le(8)
+        }
+    }
+
+    /**
+     * Write lenenc string to byte buffers.
+     *
+     * @see <a href="https://dev.mysql.com/doc/internals/en/string.html#packet-Protocol::FixedLengthString">FixedLengthString</a>
+     *
+     * @param value fixed length string
+     */
+    pub fn put_string_lenenc(&mut self, v: &[u8]) {
+        let len = v.len();
+        if len == 0 {
+            self.put_u8(0);
+        } else {
+            self.put_int_lenenc(len);
+            self.put_slice(v);
         }
     }
 
@@ -365,6 +382,234 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
 }
 
 impl MySQLPacket for MySQLHandshakeResponse41Packet {
+
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+
+}
+
+/**
+ * COM_QUERY response field count packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html">COM_QUERY field count</a>
+ */
+pub struct MySQLFieldCountPacket {
+
+    sequence_id: u32,
+    column_count: u32,
+    
+}
+
+impl MySQLFieldCountPacket {
+    
+    pub fn new(sequence_id: u32, column_count: u32) -> Self {
+        MySQLFieldCountPacket {
+            sequence_id,
+            column_count
+        }
+    }
+    
+}
+
+impl MySQLPacket for MySQLFieldCountPacket {
+
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLFieldCountPacket {
+
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_int_lenenc(this.column_count as usize);
+
+        payload
+    }
+
+}
+
+/**
+ * Column definition above MySQL 4.1 packet protocol.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html#packet-Protocol::ColumnDefinition41">ColumnDefinition41</a>
+ * @see <a href="https://mariadb.com/kb/en/library/resultset/#column-definition-packet">Column definition packet</a>
+ */
+pub struct MySQLColumnDefinition41Packet {
+
+    catalog: String, // "def"
+    next_length: u8, // 0x0c
+    sequence_id: u32,
+    character_set: u16,
+    flags: u16,
+    schema: String,
+    table: String,
+    org_table: String,
+    name: String,
+    org_name: String,
+    column_length: u32,
+    column_type: u8, // MySQLColumnType
+    decimals: u8,
+
+}
+
+impl MySQLColumnDefinition41Packet {
+
+    pub fn new(sequence_id: u32,
+               character_set: u16,
+               flags: u16,
+               schema: String,
+               table: String,
+               org_table: String,
+               name: String,
+               org_name: String,
+               column_length: u32,
+               column_type: u8, // MySQLColumnType
+               decimals: u8) -> Self {
+        MySQLColumnDefinition41Packet {
+            catalog: "def".to_string(),
+            next_length: 0x0c,
+            sequence_id,
+            character_set,
+            flags,
+            schema,
+            table,
+            org_table,
+            name,
+            org_name,
+            column_length,
+            column_type,
+            decimals
+        }
+    }
+
+}
+
+impl MySQLPacket for MySQLColumnDefinition41Packet {
+
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLColumnDefinition41Packet {
+
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_string_lenenc(this.catalog.as_bytes());
+        payload.put_string_lenenc(this.schema.as_bytes());
+        payload.put_string_lenenc(this.table.as_bytes());
+        payload.put_string_lenenc(this.org_table.as_bytes());
+        payload.put_string_lenenc(this.name.as_bytes());
+        payload.put_string_lenenc(this.org_name.as_bytes());
+        payload.put_int_lenenc(this.next_length as usize);
+        payload.put_u16_le(this.character_set);
+        payload.put_u32_le(this.column_length);
+        payload.put_u8(this.column_type as u8);
+        payload.put_u16_le(this.flags);
+        payload.put_u8(this.decimals);
+        payload.advance(2);
+
+        payload
+    }
+
+}
+
+/**
+ * Text result set row packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow">ResultsetRow</a>
+ */
+pub struct MySQLTextResultSetRowPacket {
+
+    sequence_id: u32,
+    data: Vec<(bool, Vec<u8>)>, // NULL = 0xfb
+}
+
+impl MySQLTextResultSetRowPacket {
+
+    pub fn new(sequence_id: u32, data: Vec<(bool, Vec<u8>)>) -> Self {
+        MySQLTextResultSetRowPacket {
+            sequence_id: sequence_id,
+            data: data
+        }
+    }
+
+}
+
+impl MySQLPacket for MySQLTextResultSetRowPacket {
+
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLTextResultSetRowPacket {
+
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+
+        for (null, col_v) in this.data.iter() {
+            if *(null) {
+                payload.put_u8(0xfb);
+            } else {
+                payload.put_string_lenenc(col_v.as_slice());
+            }
+        }
+
+        payload
+    }
+
+}
+
+/**
+* EOF packet protocol for MySQL.
+*
+* @see <a href="https://dev.mysql.com/doc/internals/en/packet-EOF_Packet.html">EOF Packet</a>
+*/
+pub struct MySQLEOFPacket {
+
+    /**
+     * Header of EOF packet.
+     */
+    header: u8, // 0xfe;
+    sequence_id: u32,
+    warnings: u16,
+    status_flags: u16,
+
+}
+
+impl MySQLEOFPacket {
+
+    pub fn new(sequence_id: u32) -> Self {
+        MySQLEOFPacket {
+            header: 0xfe,
+            sequence_id,
+            warnings: 0,
+            status_flags: MySQLStatusFlag::ServerStatusAutocommit as u16
+        }
+    }
+
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLEOFPacket {
+
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(this.header);
+        payload.put_u16_le(this.warnings);
+        payload.put_u16_le(this.status_flags);
+
+        payload
+    }
+
+}
+
+impl MySQLPacket for MySQLEOFPacket {
 
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
