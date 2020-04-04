@@ -57,11 +57,14 @@ use mysql::prelude::*;
 use mysql::{Conn, from_row, Value};
 
 mod protocol;
+mod parser;
 
 use protocol::database::mysql::constant::*;
 use protocol::database::mysql::codec::*;
-use crate::protocol::database::mysql::packet::{MySQLHandshakePacket, MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket, MySQLFieldCountPacket, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket};
-use crate::protocol::database::{DatabasePacket, PacketPayload};
+use crate::protocol::database::mysql::packet::{MySQLHandshakePacket, MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket, MySQLFieldCountPacket, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket, MySQLComQueryPacket};
+use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
+use crate::parser::mysql::parser;
+use sqlparser::ast::Statement;
 
 
 /// The in-memory database shared amongst all clients.
@@ -107,7 +110,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // and set up our TCP listener to accept connections.
     let addr = env::args()
         .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8306".to_string());
+        .unwrap_or_else(|| "127.0.0.1:3306".to_string());
 
     let mut listener = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
@@ -165,9 +168,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 if !authorized {
                                     let mut packet = MySQLHandshakeResponse41Packet::new();
                                     let mut payload = MySQLPacketPayload::new_with_payload(payload);
-                                    packet.decode(&mut payload);
+                                    let mut packet = DatabasePacket::decode(&mut packet, &mut payload);
 
-                                    let mut ok_packet = MySQLOKPacket::new(packet.get_sequence_id() + 1);
+                                    let mut ok_packet = MySQLOKPacket::new(packet.get_sequence_id() + 1, 0, 0);
                                     let mut ok_payload = MySQLPacketPayload::new();
                                     let mut ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
                                     let ok_bytes = ok_payload.get_bytes();
@@ -178,116 +181,247 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                                     authorized = true; //小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
                                 } else {
-                                    let database_url = "mysql://root:123456@localhost:3307";
+                                    let len = payload.get_uint_le(3);
+                                    let sequence_id = payload.get_uint(1) as u32 & 0xff;
+                                    let command_packet_type = payload.get_uint(1) as u8;
 
-                                    let mut conn = Conn::new(database_url).unwrap();
+                                    let mut command_packet = MySQLComQueryPacket::new(command_packet_type);
+                                    let mut command_payload = MySQLPacketPayload::new_with_payload(payload);
+                                    let mut command_packet = DatabasePacket::decode(&mut command_packet, &mut command_payload);
 
-                                    conn.query_drop("CREATE DATABASE IF NOT EXISTS test DEFAULT CHARSET utf8 COLLATE utf8_general_ci;").unwrap();
-                                    conn.select_db("test");
+                                    match MySQLCommandPacketType::value_of(command_packet.get_command_type()) {
+                                        MySQLCommandPacketType::ComQuery => {
+                                            let database_url = "mysql://root:root@localhost:8306";
+                                            let mut conn = Conn::new(database_url).unwrap();
+                                            let command_sql = command_packet.get_sql();
+                                            let sql = String::from_utf8_lossy(command_sql.as_slice());
+                                            let sql = sql.to_string();
+                                            println!("SQL = {}", sql);
 
-                                    // This query will emit two result sets.
-                                    let mut result = conn.query_iter("SELECT a from test").unwrap();
+                                            if sql.starts_with("/* mysql-connector-java") {
+                                                // This query will emit two result sets.
+                                                let mut result = conn.query_iter(sql).unwrap();
 
-                                    let mut global_sequence_id: u32 = 1;
+                                                while let Some(result_set) = result.next_set() {
+                                                    let mut global_sequence_id: u32 = 1;
 
-                                    while let Some(result_set) = result.next_set() {
-                                        let result_set = result_set.unwrap();
+                                                    let result_set = result_set.unwrap();
 
-                                        let columns = result_set.columns();
-                                        let columns_ref = columns.as_ref();
-                                        let columns_size = columns_ref.len();
-                                        let mut field_count_packet = MySQLFieldCountPacket::new(global_sequence_id, columns_size as u32);
-                                        let mut field_count_payload = MySQLPacketPayload::new();
-                                        let mut field_count_payload = DatabasePacket::encode(&mut field_count_packet, &mut field_count_payload);
+                                                    let columns = result_set.columns();
+                                                    let columns_ref = columns.as_ref();
+                                                    let columns_size = columns_ref.len();
+                                                    let mut field_count_packet = MySQLFieldCountPacket::new(global_sequence_id, columns_size as u32);
+                                                    let mut field_count_payload = MySQLPacketPayload::new();
+                                                    let mut field_count_payload = DatabasePacket::encode(&mut field_count_packet, &mut field_count_payload);
 
-                                        if let Err(e) = sink.send(field_count_payload.get_bytes()).await {
-                                            println!("error on sending field_count_packet response; error = {:?}", e);
-                                        }
+                                                    if let Err(e) = sink.send(field_count_payload.get_bytes()).await {
+                                                        println!("error on sending field_count_packet response; error = {:?}", e);
+                                                    }
 
-                                        for c in columns_ref {
-                                            global_sequence_id = global_sequence_id + 1;
-                                            let sequence_id = global_sequence_id;
-                                            let character_set: u16 = c.character_set();
-                                            let flags: u16 = c.flags().bits() as u16;
-                                            let schema: String = c.schema_str().to_string();
-                                            let table: String = c.table_str().to_string();
-                                            let org_table: String = c.org_table_str().to_string();
-                                            let name: String = c.name_str().to_string();
-                                            let org_name: String = c.org_name_str().to_string();
-                                            let column_length: u32 = c.column_length();
-                                            let column_type: u8 = c.column_type() as u8; // MySQLColumnType
-                                            let decimals: u8 = c.decimals();
-                                            let mut column_definition41_packet =
-                                                MySQLColumnDefinition41Packet::new(
-                                                    sequence_id,
-                                                      character_set,
-                                                      flags,
-                                                      schema,
-                                                      table,
-                                                      org_table,
-                                                      name,
-                                                      org_name,
-                                                      column_length,
-                                                      column_type, // MySQLColumnType
-                                                      decimals
-                                                );
-                                            let mut column_definition41_payload = MySQLPacketPayload::new();
-                                            let mut column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
+                                                    for c in columns_ref {
+                                                        global_sequence_id = global_sequence_id + 1;
+                                                        let sequence_id = global_sequence_id;
+                                                        let character_set: u16 = c.character_set();
+                                                        let flags: u16 = c.flags().bits() as u16;
+                                                        let schema: String = c.schema_str().to_string();
+                                                        let table: String = c.table_str().to_string();
+                                                        let org_table: String = c.org_table_str().to_string();
+                                                        let name: String = c.name_str().to_string();
+                                                        let org_name: String = c.org_name_str().to_string();
+                                                        let column_length: u32 = c.column_length();
+                                                        let column_type: u8 = c.column_type() as u8; // MySQLColumnType
+                                                        let decimals: u8 = c.decimals();
+                                                        let mut column_definition41_packet =
+                                                            MySQLColumnDefinition41Packet::new(
+                                                                sequence_id,
+                                                                character_set,
+                                                                flags,
+                                                                schema,
+                                                                table,
+                                                                org_table,
+                                                                name,
+                                                                org_name,
+                                                                column_length,
+                                                                column_type, // MySQLColumnType
+                                                                decimals
+                                                            );
+                                                        let mut column_definition41_payload = MySQLPacketPayload::new();
+                                                        let mut column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
 
-                                            if let Err(e) = sink.send(column_definition41_payload.get_bytes()).await {
-                                                println!("error on sending column_definition41_packet response; error = {:?}", e);
+                                                        if let Err(e) = sink.send(column_definition41_payload.get_bytes()).await {
+                                                            println!("error on sending column_definition41_packet response; error = {:?}", e);
+                                                        }
+                                                    }
+
+                                                    global_sequence_id = global_sequence_id + 1;
+                                                    let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
+                                                    let mut eof_payload = MySQLPacketPayload::new();
+                                                    let mut eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
+
+                                                    if let Err(e) = sink.send(eof_payload.get_bytes()).await {
+                                                        println!("error on sending eof_packet response; error = {:?}", e);
+                                                    }
+
+                                                    for row in result_set {
+                                                        let row = row.unwrap();
+                                                        let mut row_data: Vec<(bool, Vec<u8>)> = Vec::new();
+                                                        for column_index in 0..columns_size {
+                                                            let v = row.as_ref(column_index).unwrap();
+                                                            let data = match v {
+                                                                Value::Bytes(data) => (true, data.clone()),
+                                                                Value::NULL => (false, Vec::new()),
+                                                                _ => (true, Vec::new()),
+                                                            };
+                                                            row_data.push(data);
+                                                        }
+
+                                                        global_sequence_id = global_sequence_id + 1;
+                                                        let mut text_result_set_row_packet = MySQLTextResultSetRowPacket::new(global_sequence_id, row_data);
+                                                        let mut text_result_set_row_payload = MySQLPacketPayload::new();
+                                                        let mut text_result_set_row_payload = DatabasePacket::encode(&mut text_result_set_row_packet, &mut text_result_set_row_payload);
+
+                                                        if let Err(e) = sink.send(text_result_set_row_payload.get_bytes()).await {
+                                                            println!("error on sending text_result_set_row_packet response; error = {:?}", e);
+                                                        }
+                                                    }
+
+                                                    global_sequence_id = global_sequence_id + 1;
+                                                    let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
+                                                    let mut eof_payload = MySQLPacketPayload::new();
+                                                    let mut eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
+
+                                                    if let Err(e) = sink.send(eof_payload.get_bytes()).await {
+                                                        println!("error on sending eof_packet response; error = {:?}", e);
+                                                    }
+                                                }
+                                            } else {
+                                                let statement = parser::mysql::parser(sql.as_str());
+                                                let statement = &statement[0];
+                                                match statement {
+                                                    Statement::Query(q) => {
+                                                        // This query will emit two result sets.
+                                                        let mut result = conn.query_iter((*q).to_string()).unwrap();
+
+                                                        let mut global_sequence_id: u32 = 1;
+
+                                                        while let Some(result_set) = result.next_set() {
+                                                            let result_set = result_set.unwrap();
+
+                                                            let columns = result_set.columns();
+                                                            let columns_ref = columns.as_ref();
+                                                            let columns_size = columns_ref.len();
+                                                            let mut field_count_packet = MySQLFieldCountPacket::new(global_sequence_id, columns_size as u32);
+                                                            let mut field_count_payload = MySQLPacketPayload::new();
+                                                            let mut field_count_payload = DatabasePacket::encode(&mut field_count_packet, &mut field_count_payload);
+
+                                                            if let Err(e) = sink.send(field_count_payload.get_bytes()).await {
+                                                                println!("error on sending field_count_packet response; error = {:?}", e);
+                                                            }
+
+                                                            for c in columns_ref {
+                                                                global_sequence_id = global_sequence_id + 1;
+                                                                let sequence_id = global_sequence_id;
+                                                                let character_set: u16 = c.character_set();
+                                                                let flags: u16 = c.flags().bits() as u16;
+                                                                let schema: String = c.schema_str().to_string();
+                                                                let table: String = c.table_str().to_string();
+                                                                let org_table: String = c.org_table_str().to_string();
+                                                                let name: String = c.name_str().to_string();
+                                                                let org_name: String = c.org_name_str().to_string();
+                                                                let column_length: u32 = c.column_length();
+                                                                let column_type: u8 = c.column_type() as u8; // MySQLColumnType
+                                                                let decimals: u8 = c.decimals();
+                                                                let mut column_definition41_packet =
+                                                                    MySQLColumnDefinition41Packet::new(
+                                                                        sequence_id,
+                                                                        character_set,
+                                                                        flags,
+                                                                        schema,
+                                                                        table,
+                                                                        org_table,
+                                                                        name,
+                                                                        org_name,
+                                                                        column_length,
+                                                                        column_type, // MySQLColumnType
+                                                                        decimals
+                                                                    );
+                                                                let mut column_definition41_payload = MySQLPacketPayload::new();
+                                                                let mut column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
+
+                                                                if let Err(e) = sink.send(column_definition41_payload.get_bytes()).await {
+                                                                    println!("error on sending column_definition41_packet response; error = {:?}", e);
+                                                                }
+                                                            }
+
+                                                            global_sequence_id = global_sequence_id + 1;
+                                                            let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
+                                                            let mut eof_payload = MySQLPacketPayload::new();
+                                                            let mut eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
+
+                                                            if let Err(e) = sink.send(eof_payload.get_bytes()).await {
+                                                                println!("error on sending eof_packet response; error = {:?}", e);
+                                                            }
+
+                                                            for row in result_set {
+                                                                let row = row.unwrap();
+                                                                let mut datas: Vec<(bool, Vec<u8>)> = Vec::new();
+                                                                for column_index in 0..columns_size {
+                                                                    let v = row.as_ref(column_index).unwrap();
+                                                                    let data = match v {
+                                                                        Value::Bytes(data) => (true, data.clone()),
+                                                                        Value::NULL => (false, Vec::new()),
+                                                                        _ => (true, Vec::new()),
+                                                                    };
+                                                                    datas.push(data);
+                                                                }
+
+                                                                global_sequence_id = global_sequence_id + 1;
+                                                                let mut text_result_set_row_packet = MySQLTextResultSetRowPacket::new(global_sequence_id, datas);
+                                                                let mut text_result_set_row_payload = MySQLPacketPayload::new();
+                                                                let mut text_result_set_row_payload = DatabasePacket::encode(&mut text_result_set_row_packet, &mut text_result_set_row_payload);
+
+                                                                if let Err(e) = sink.send(text_result_set_row_payload.get_bytes()).await {
+                                                                    println!("error on sending text_result_set_row_packet response; error = {:?}", e);
+                                                                }
+                                                            }
+
+                                                            global_sequence_id = global_sequence_id + 1;
+                                                            let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
+                                                            let mut eof_payload = MySQLPacketPayload::new();
+                                                            let mut eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
+
+                                                            if let Err(e) = sink.send(eof_payload.get_bytes()).await {
+                                                                println!("error on sending eof_packet response; error = {:?}", e);
+                                                            }
+                                                        }
+                                                    },
+                                                    Statement::SetVariable{
+                                                        local,
+                                                        variable,
+                                                        value,} => {
+                                                        // This query will emit two result sets.
+                                                        let mut result = conn.query_iter((*statement).to_string()).unwrap();
+
+                                                        let mut global_sequence_id: u32 = 1;
+
+                                                        while let Some(result_set) = result.next_set() {
+                                                            let result_set = result_set.unwrap();
+
+                                                            let mut ok_packet = MySQLOKPacket::new(global_sequence_id, result_set.affected_rows(), result_set.last_insert_id().unwrap());
+                                                            let mut ok_payload = MySQLPacketPayload::new();
+                                                            let mut ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
+
+                                                            if let Err(e) = sink.send(ok_payload.get_bytes()).await {
+                                                                println!("error on sending ok_packet response; error = {:?}", e);
+                                                            }
+                                                        }
+                                                    }
+
+                                                    _ => {}
+                                                }
                                             }
                                         }
-
-                                        global_sequence_id = global_sequence_id + 1;
-                                        let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
-                                        let mut eof_payload = MySQLPacketPayload::new();
-                                        let mut eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
-
-                                        if let Err(e) = sink.send(eof_payload.get_bytes()).await {
-                                            println!("error on sending eof_packet response; error = {:?}", e);
-                                        }
-
-                                        // println!("Result set columns: {:?}", result_set.columns());
-                                        // println!(
-                                        //     "Result set meta: {}, {:?}, {} {}",
-                                        //     result_set.affected_rows(),
-                                        //     result_set.last_insert_id(),
-                                        //     result_set.warnings(),
-                                        //     result_set.info_str(),
-                                        // );
-
-                                        for row in result_set {
-                                            let row = row.unwrap();
-                                            let mut datas: Vec<(bool, Vec<u8>)> = Vec::new();
-                                            for column_index in 0..columns_size {
-                                                let v = row.as_ref(column_index).unwrap();
-                                                let data = match v {
-                                                    Value::Bytes(data) => (true, data.clone()),
-                                                    Value::NULL => (false, Vec::new()),
-                                                    _ => (true, Vec::new()),
-                                                };
-                                                datas.push(data);
-                                            }
-
-                                            global_sequence_id = global_sequence_id + 1;
-                                            let mut text_result_set_row_packet = MySQLTextResultSetRowPacket::new(global_sequence_id, datas);
-                                            let mut text_result_set_row_payload = MySQLPacketPayload::new();
-                                            let mut text_result_set_row_payload = DatabasePacket::encode(&mut text_result_set_row_packet, &mut text_result_set_row_payload);
-
-                                            if let Err(e) = sink.send(text_result_set_row_payload.get_bytes()).await {
-                                                println!("error on sending text_result_set_row_packet response; error = {:?}", e);
-                                            }
-                                        }
-                                    }
-
-                                    global_sequence_id = global_sequence_id + 1;
-                                    let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
-                                    let mut eof_payload = MySQLPacketPayload::new();
-                                    let mut eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
-
-                                    if let Err(e) = sink.send(eof_payload.get_bytes()).await {
-                                        println!("error on sending eof_packet response; error = {:?}", e);
+                                        _ => {}
                                     }
 
                                     // let response = handle_request(&String::from_utf8_lossy(payload.bytes()), &db);

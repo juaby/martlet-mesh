@@ -38,5 +38,15 @@ pub trait DatabasePacket<T: PacketPayload> {
      *
      * @param payload packet payload to be written
      */
-    fn decode(&mut self, payload: &mut T) {}
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut T) -> &'d mut Self { this }
+
+}
+
+/**
+ * Command packet type.
+ */
+pub trait CommandPacketType {
+
+    fn value_of(t: u8) -> Self;
+
 }

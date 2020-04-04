@@ -1,5 +1,5 @@
-use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLColumnType};
-use crate::protocol::database::{PacketPayload, DatabasePacket};
+use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLColumnType, MySQLCommandPacketType};
+use crate::protocol::database::{PacketPayload, DatabasePacket, CommandPacketType};
 
 use rand::Rng;
 use bytes::{BytesMut, Buf, BufMut, Bytes};
@@ -87,10 +87,14 @@ impl MySQLPacketPayload {
             Some(pos) => pos,
             None => 0 // TODO
         };
-        let bytes = self.bytes_mut.split_to(pos);
-        let result = String::from_utf8_lossy(bytes.bytes()).to_string();
-        self.bytes_mut.advance(1);
-        result
+        if pos == 0 {
+            "".to_string()
+        } else {
+            let bytes = self.bytes_mut.split_to(pos);
+            let result = String::from_utf8_lossy(bytes.bytes()).to_string();
+            self.bytes_mut.advance(1);
+            result
+        }
     }
 
     /**
@@ -101,13 +105,12 @@ impl MySQLPacketPayload {
      * @param value lenenc integer
      */
     pub fn put_int_lenenc(&mut self, v: usize) {
-        let two: u64 = 2;
         if v < 0xfb {
             self.bytes_mut.put_u8(v as u8);
-        } else if v < two.pow(16).try_into().unwrap() {
+        } else if v < 0x10000 {
             self.bytes_mut.put_u8(0xfc);
             self.bytes_mut.put_u16_le(v as u16);
-        } else if v < two.pow(24).try_into().unwrap() {
+        } else if v < 0x1000000 {
             self.bytes_mut.put_u8(0xfd);
             self.bytes_mut.put_uint_le(v as u64, 3);
         } else {
@@ -180,6 +183,11 @@ impl MySQLPacketPayload {
     pub fn get_string_fix(&mut self) -> Vec<u8> {
         let length = self.bytes_mut.get_uint(1) as u32 & 0xff;
         let tmp = self.bytes_mut.split_to(length as usize);
+        tmp.to_vec()
+    }
+
+    pub fn get_remaining_bytes(&mut self) -> Vec<u8> {
+        let tmp = self.bytes_mut.bytes();
         tmp.to_vec()
     }
 
@@ -346,37 +354,38 @@ impl MySQLHandshakeResponse41Packet {
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
 
-    fn decode(&mut self, payload: &mut MySQLPacketPayload) {
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
         let len = payload.get_uint_le(3);
-        self.sequence_id = payload.get_uint(1) as u32 & 0xff;
-        self.capability_flags = payload.get_uint_le(4) as u32;
-        self.max_packet_size = payload.get_uint_le(4) as u32;
-        self.character_set = payload.get_uint(1) as u8 & 0xff;
+        this.sequence_id = payload.get_uint(1) as u32 & 0xff;
+        this.capability_flags = payload.get_uint_le(4) as u32;
+        this.max_packet_size = payload.get_uint_le(4) as u32;
+        this.character_set = payload.get_uint(1) as u8 & 0xff;
         payload.advance(23);
 
         // string with nul
-        self.user_name = payload.get_string_nul();
+        this.user_name = payload.get_string_nul();
 
-        self.auth_response = if 0 != (self.capability_flags & MySQLCapabilityFlag::ClientPluginAuthLenencClientData as u32) {
+        this.auth_response = if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientPluginAuthLenencClientData as u32) {
             payload.get_string_lenenc()
-        } else if 0 != (self.capability_flags & MySQLCapabilityFlag::ClientSecureConnection as u32) {
+        } else if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientSecureConnection as u32) {
             payload.get_string_fix()
         } else {
             let auth = payload.get_string_nul();
             auth.into_bytes()
         };
 
-        self.database = if 0 != (self.capability_flags & MySQLCapabilityFlag::ClientConnectWithDb as u32) {
+        this.database = if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientConnectWithDb as u32) {
             payload.get_string_nul()
         } else {
             String::from("")
         };
 
-        self.auth_plugin_name = if 0 != (self.capability_flags & MySQLCapabilityFlag::ClientPluginAuth as u32) {
+        this.auth_plugin_name = if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientPluginAuth as u32) {
             payload.get_string_nul()
         } else {
             String::from("")
         };
+        this
     }
 
 }
@@ -511,7 +520,9 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLColumnDefinition41Packet {
         payload.put_u8(this.column_type as u8);
         payload.put_u16_le(this.flags);
         payload.put_u8(this.decimals);
-        payload.advance(2);
+        // Write null for reserved to byte buffers.
+        let reserved: [u8; 2] = [0,0];
+        payload.put_slice(&reserved);
 
         payload
     }
@@ -554,7 +565,7 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLTextResultSetRowPacket {
         payload.put_u8(this.get_sequence_id() as u8); // seq
 
         for (null, col_v) in this.data.iter() {
-            if *(null) {
+            if !*(null) {
                 payload.put_u8(0xfb);
             } else {
                 payload.put_string_lenenc(col_v.as_slice());
@@ -639,12 +650,12 @@ pub struct MySQLOKPacket {
 
 impl MySQLOKPacket {
 
-    pub fn new(sequence_id: u32) -> Self {
+    pub fn new(sequence_id: u32, affected_rows: u64, last_insert_id: u64) -> Self {
         MySQLOKPacket {
             header: 0x00,
             sequence_id: sequence_id,
-            affected_rows: 0,
-            last_insert_id: 0,
+            affected_rows: affected_rows,
+            last_insert_id: last_insert_id,
             status_flag: MySQLStatusFlag::ServerStatusAutocommit as u32,
             warnings: 0,
             info: "".to_string()
@@ -673,6 +684,57 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLOKPacket {
 }
 
 impl MySQLPacket for MySQLOKPacket {
+
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+
+}
+
+/**
+ * COM_QUERY command packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-query.html">COM_QUERY</a>
+ */
+pub struct MySQLComQueryPacket {
+
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    sql: Vec<u8>
+
+}
+
+impl MySQLComQueryPacket {
+
+    pub fn new(command_type: u8) -> Self {
+        MySQLComQueryPacket {
+            sequence_id: 0,
+            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            sql: vec![]
+        }
+    }
+
+    pub fn get_sql(&self) -> Vec<u8> {
+        self.sql.clone()
+    }
+
+    pub fn get_command_type(&self) -> u8 {
+        self.command_type
+    }
+
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLComQueryPacket {
+
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        let bytes = payload.get_remaining_bytes();
+        this.sql = Vec::from(bytes.as_slice());
+        this
+    }
+
+}
+
+impl MySQLPacket for MySQLComQueryPacket {
 
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
