@@ -14,7 +14,7 @@ pub trait PacketPayload {
      *
      * @return byte buf
      */
-    fn get_bytes(&mut self) -> Bytes;
+    fn as_bytes(&mut self) -> Bytes;
 }
 
 /**
@@ -29,7 +29,7 @@ pub trait DatabasePacket<T: PacketPayload> {
      *
      * @param payload packet payload to be written
      */
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut T) -> &'p mut T {
+    fn encode<'p,'d>(_this: &'d mut Self, payload: &'p mut T) -> &'p mut T {
         payload
     }
 
@@ -38,7 +38,7 @@ pub trait DatabasePacket<T: PacketPayload> {
      *
      * @param payload packet payload to be written
      */
-    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut T) -> &'d mut Self { this }
+    fn decode<'p,'d>(this: &'d mut Self, _payload: &'p mut T) -> &'d mut Self { this }
 
 }
 

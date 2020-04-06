@@ -1,10 +1,8 @@
-use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLColumnType, MySQLCommandPacketType};
-use crate::protocol::database::{PacketPayload, DatabasePacket, CommandPacketType};
+use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED};
+use crate::protocol::database::{PacketPayload, DatabasePacket};
 
 use rand::Rng;
 use bytes::{BytesMut, Buf, BufMut, Bytes};
-
-use std::convert::TryInto;
 
 const PAYLOAD_LENGTH: u32 = 3;
 const SEQUENCE_LENGTH: u32 = 1;
@@ -195,7 +193,7 @@ impl MySQLPacketPayload {
 
 impl PacketPayload for MySQLPacketPayload {
 
-    fn get_bytes(&mut self) -> Bytes {
+    fn as_bytes(&mut self) -> Bytes {
         self.bytes_mut.to_bytes()
     }
 
@@ -355,7 +353,7 @@ impl MySQLHandshakeResponse41Packet {
 impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
 
     fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
-        let len = payload.get_uint_le(3);
+        let _len = payload.get_uint_le(3);
         this.sequence_id = payload.get_uint(1) as u32 & 0xff;
         this.capability_flags = payload.get_uint_le(4) as u32;
         this.max_packet_size = payload.get_uint_le(4) as u32;
