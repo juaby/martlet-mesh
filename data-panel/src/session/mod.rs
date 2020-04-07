@@ -22,12 +22,12 @@ impl Session {
         *(self.authorized.get_mut())
     }
 
-    pub fn start(&mut self) {
-        self.handle(false);
+    pub async fn start(&mut self) {
+        self.handle(false).await;
     }
 
-    pub fn handle(&mut self, authorized: bool) {
-        self.io_ctx.receive(authorized);
+    pub async fn handle(&mut self, authorized: bool) {
+        self.io_ctx.receive(authorized).await;
     }
 
 }

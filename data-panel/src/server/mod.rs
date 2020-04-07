@@ -31,12 +31,12 @@ pub fn io_context_id() -> u64 {
     IO_CONTEXT_ID.fetch_add(1, Ordering::SeqCst)
 }
 
-pub fn start_session(mut session: Session) {
-    session.start();
+pub async fn start_session(mut session: Session) {
+    session.start().await;
     // SESSION_MANAGER.add_and_start(session);
 }
 
-pub fn handle(socket: TcpStream) {
+pub async fn handle(socket: TcpStream) {
     // Since our protocol is line-based we use `tokio_codecs`'s `LineCodec`
     // to convert our stream of bytes, `socket`, into a `Stream` of lines
     // as well as convert our line based responses into a stream of bytes.
@@ -45,7 +45,7 @@ pub fn handle(socket: TcpStream) {
     let io_ctx = IOContext::new(io_ctx_id, socket);
     let session = Session::new(io_ctx);
 
-    start_session(session);
+    start_session(session).await;
 }
 
 pub struct IOContext {
@@ -73,7 +73,7 @@ impl IOContext {
 
     }
 
-    pub fn receive(&mut self, authorized: bool) {
+    pub async fn receive(&mut self, authorized: bool) {
         let (r, w) = self.socket.split();
         let mut stream = read_frame(r);
         let mut sink = write_frame(w);
@@ -120,7 +120,7 @@ impl IOContext {
 
                         match MySQLCommandPacketType::value_of(command_packet.get_command_type()) {
                             MySQLCommandPacketType::ComQuery => {
-                                let database_url = "mysql://root:root@localhost:8306/test";
+                                let database_url = "mysql://root:123456@localhost:3307/test";
                                 let mut conn = Conn::new(database_url).unwrap();
                                 let command_sql = command_packet.get_sql();
                                 let sql = String::from_utf8_lossy(command_sql.as_slice());
