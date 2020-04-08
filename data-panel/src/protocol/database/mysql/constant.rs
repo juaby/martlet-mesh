@@ -7,7 +7,7 @@ pub const PROTOCOL_VERSION: u8 = 0x0A;
 pub const NUL: u8 = 0x00;
 
 /// Server version.
-pub const SERVER_VERSION: &str = "0.1.0-DBMesh";
+pub const SERVER_VERSION: &str = "5.7.29-DBMesh 0.1.0";
 
 /// Charset code 0x21 is utf8_general_ci.
 pub const CHARSET: u8 = 0x21;

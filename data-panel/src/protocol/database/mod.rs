@@ -14,7 +14,7 @@ pub trait PacketPayload {
      *
      * @return byte buf
      */
-    fn as_bytes(&mut self) -> Bytes;
+    fn get_payload(&mut self) -> Bytes;
 }
 
 /**

@@ -79,11 +79,11 @@ impl IOContext {
         let mut sink = write_frame(w);
 
         // self.handshake();
-        let mut packet = MySQLHandshakePacket::new(100);
-        let mut payload = MySQLPacketPayload::new();
-        let payload = DatabasePacket::encode(&mut packet, &mut payload);
+        let mut handshake_packet = MySQLHandshakePacket::new(100);
+        let mut handshake_payload = MySQLPacketPayload::new();
+        let handshake_payload = DatabasePacket::encode(&mut handshake_packet, &mut handshake_payload);
 
-        if let Err(e) = sink.send(payload.as_bytes()).await {
+        if let Err(e) = sink.send(handshake_payload.get_payload()).await {
             println!("error on sending Handshake Packet response; error = {:?}", e);
         }
 
@@ -95,16 +95,15 @@ impl IOContext {
             match result {
                 Ok(mut payload) => {
                     if !authorized {
-                        let mut packet = MySQLHandshakeResponse41Packet::new();
-                        let mut payload = MySQLPacketPayload::new_with_payload(payload);
-                        let packet = DatabasePacket::decode(&mut packet, &mut payload);
+                        let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
+                        let mut handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
+                        let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &mut handshake_response41_payload);
 
-                        let mut ok_packet = MySQLOKPacket::new(packet.get_sequence_id() + 1, 0, 0);
+                        let mut ok_packet = MySQLOKPacket::new(handshake_response41_packet.get_sequence_id() + 1, 0, 0);
                         let mut ok_payload = MySQLPacketPayload::new();
                         let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
-                        let ok_bytes = ok_payload.as_bytes();
 
-                        if let Err(e) = sink.send(ok_bytes).await {
+                        if let Err(e) = sink.send(ok_payload.get_payload()).await {
                             println!("error on sending response; error = {:?}", e);
                         }
 
@@ -120,7 +119,7 @@ impl IOContext {
 
                         match MySQLCommandPacketType::value_of(command_packet.get_command_type()) {
                             MySQLCommandPacketType::ComQuery => {
-                                let database_url = "mysql://root:123456@localhost:3307/test";
+                                let database_url = "mysql://root:root@localhost:8306/test";
                                 let mut conn = Conn::new(database_url).unwrap();
                                 let command_sql = command_packet.get_sql();
                                 let sql = String::from_utf8_lossy(command_sql.as_slice());
@@ -156,7 +155,7 @@ impl IOContext {
                                                 let mut field_count_payload = MySQLPacketPayload::new();
                                                 let field_count_payload = DatabasePacket::encode(&mut field_count_packet, &mut field_count_payload);
 
-                                                if let Err(e) = sink.send(field_count_payload.as_bytes()).await {
+                                                if let Err(e) = sink.send(field_count_payload.get_payload()).await {
                                                     println!("error on sending field_count_packet response; error = {:?}", e);
                                                 }
 
@@ -190,7 +189,7 @@ impl IOContext {
                                                     let mut column_definition41_payload = MySQLPacketPayload::new();
                                                     let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
 
-                                                    if let Err(e) = sink.send(column_definition41_payload.as_bytes()).await {
+                                                    if let Err(e) = sink.send(column_definition41_payload.get_payload()).await {
                                                         println!("error on sending column_definition41_packet response; error = {:?}", e);
                                                     }
                                                 }
@@ -200,7 +199,7 @@ impl IOContext {
                                                 let mut eof_payload = MySQLPacketPayload::new();
                                                 let eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
 
-                                                if let Err(e) = sink.send(eof_payload.as_bytes()).await {
+                                                if let Err(e) = sink.send(eof_payload.get_payload()).await {
                                                     println!("error on sending eof_packet response; error = {:?}", e);
                                                 }
 
@@ -222,7 +221,7 @@ impl IOContext {
                                                     let mut text_result_set_row_payload = MySQLPacketPayload::new();
                                                     let text_result_set_row_payload = DatabasePacket::encode(&mut text_result_set_row_packet, &mut text_result_set_row_payload);
 
-                                                    if let Err(e) = sink.send(text_result_set_row_payload.as_bytes()).await {
+                                                    if let Err(e) = sink.send(text_result_set_row_payload.get_payload()).await {
                                                         println!("error on sending text_result_set_row_packet response; error = {:?}", e);
                                                     }
                                                 }
@@ -232,7 +231,7 @@ impl IOContext {
                                                 let mut eof_payload = MySQLPacketPayload::new();
                                                 let eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
 
-                                                if let Err(e) = sink.send(eof_payload.as_bytes()).await {
+                                                if let Err(e) = sink.send(eof_payload.get_payload()).await {
                                                     println!("error on sending eof_packet response; error = {:?}", e);
                                                 }
                                             }
@@ -260,7 +259,7 @@ impl IOContext {
                                                 let mut ok_payload = MySQLPacketPayload::new();
                                                 let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
 
-                                                if let Err(e) = sink.send(ok_payload.as_bytes()).await {
+                                                if let Err(e) = sink.send(ok_payload.get_payload()).await {
                                                     println!("error on sending ok_packet response; error = {:?}", e);
                                                 }
                                             }

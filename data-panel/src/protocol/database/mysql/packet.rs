@@ -193,7 +193,7 @@ impl MySQLPacketPayload {
 
 impl PacketPayload for MySQLPacketPayload {
 
-    fn as_bytes(&mut self) -> Bytes {
+    fn get_payload(&mut self) -> Bytes {
         self.bytes_mut.to_bytes()
     }
 
