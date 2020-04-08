@@ -268,6 +268,15 @@ impl IOContext {
                                         _ => {}
                                     }
                                 }
+                            },
+                            MySQLCommandPacketType::ComQuit => {
+                                let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
+                                let mut ok_payload = MySQLPacketPayload::new();
+                                let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
+
+                                if let Err(e) = sink.send(ok_payload.get_payload()).await {
+                                    println!("error on sending response; error = {:?}", e);
+                                }
                             }
                             _ => {}
                         }
