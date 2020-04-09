@@ -4,12 +4,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use sqlparser::ast::Statement;
 use sqlparser::ast::SetVariableValue::Ident;
-use bytes::{Buf};
+use bytes::{Buf, Bytes};
 
 use futures::SinkExt;
 
 use tokio::net::TcpStream;
 use tokio::stream::StreamExt;
+
+use tokio::net::tcp::ReadHalf;
+use tokio::net::tcp::WriteHalf;
+use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::codec::LengthDelimitedCodec;
 
 use mysql::prelude::*;
 use mysql::{Conn, Value};
@@ -21,6 +26,9 @@ use crate::protocol::database::{DatabasePacket, CommandPacketType, PacketPayload
 use crate::protocol::database::mysql::constant::MySQLCommandPacketType;
 
 use crate::session::{SessionManager, Session};
+use futures::io::Error;
+
+pub mod service;
 
 lazy_static! {
     static ref IO_CONTEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -45,23 +53,27 @@ pub async fn handle(socket: TcpStream) {
     let io_ctx = IOContext::new(io_ctx_id, socket);
     let session = Session::new(io_ctx);
 
-    start_session(session).await;
+    start_session(session).await
 }
 
 pub struct IOContext {
     id: u64,
     socket: TcpStream,
+    //stream: Option<FramedRead<ReadHalf<'a>, LengthDelimitedCodec>>,
+    //sink: Option<FramedWrite<WriteHalf<'a>, LengthDelimitedCodec>>,
     client_addr: SocketAddr
 }
 
 impl IOContext {
 
-    pub fn new(id: u64, socket: TcpStream) -> Self {
+    pub fn new(id: u64, mut socket: TcpStream) -> Self {
         let client_addr = socket.peer_addr().unwrap();
         IOContext {
             id: id,
             socket: socket,
-            client_addr: client_addr
+            //stream: None,
+            //sink: None,
+            client_addr
         }
     }
 
