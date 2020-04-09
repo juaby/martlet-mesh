@@ -1,43 +1,6 @@
-//! A "tiny database" and accompanying protocol
-//!
-//! This example shows the usage of shared state amongst all connected clients,
-//! namely a database of key/value pairs. Each connected client can send a
-//! series of GET/SET commands to query the current value of a key or set the
-//! value of a key.
-//!
-//! This example has a simple protocol you can use to interact with the server.
-//! To run, first run this in one terminal window:
-//!
-//!     cargo run --example tinydb
-//!
-//! and next in another windows run:
-//!
-//!     cargo run --example connect 127.0.0.1:8080
-//!
-//! In the `connect` window you can type in commands where when you hit enter
-//! you'll get a response from the server for that command. An example session
-//! is:
-//!
-//!
-//!     $ cargo run --example connect 127.0.0.1:8080
-//!     GET foo
-//!     foo = bar
-//!     GET FOOBAR
-//!     error: no key FOOBAR
-//!     SET FOOBAR my awesome string
-//!     set FOOBAR = `my awesome string`, previous: None
-//!     SET foo tokio
-//!     set foo = `tokio`, previous: Some("bar")
-//!     GET foo
-//!     foo = tokio
-//!
-//! Namely you can issue two forms of commands:
-//!
-//! * `GET $key` - this will fetch the value of `$key` from the database and
-//!   return it. The server's database is initially populated with the key `foo`
-//!   set to the value `bar`
-//! * `SET $key $value` - this will set the value of `$key` to `$value`,
-//!   returning the previous value, if any.
+//! 高性能代理，用于调解服务网格中所有服务的入站和出站流量。
+//! 它支持动态服务发现、负载均衡、TLS 终止、HTTP/2 和 gPRC 代理、熔断、健康检查、故障注入和性能测量等丰富的功能。
+//! Envoy 以 sidecar 的方式部署在相关的服务的 Pod 中，从而无需重新构建或重写代码
 
 #![warn(rust_2018_idioms)]
 
