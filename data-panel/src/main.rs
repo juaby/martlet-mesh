@@ -14,6 +14,7 @@ mod parser;
 mod handler;
 mod server;
 mod session;
+mod discovery;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

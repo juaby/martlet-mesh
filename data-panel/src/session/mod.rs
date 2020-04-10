@@ -1,16 +1,16 @@
 use std::collections::HashMap;
-use crate::server::IOContext;
+use crate::server::io::IOContext;
 use std::sync::atomic::AtomicBool;
 
-pub struct Session {
+pub struct Session<'a> {
     id: u64,
     authorized: AtomicBool,
-    io_ctx: IOContext,
+    io_ctx: IOContext<'a>,
 }
 
-impl Session {
+impl<'a> Session<'a> {
 
-    pub fn new(io_ctx: IOContext) -> Self {
+    pub fn new(io_ctx: IOContext<'a>) -> Self {
         Session {
             id: io_ctx.id(),
             authorized: AtomicBool::new(false),
@@ -36,11 +36,11 @@ impl Session {
 ///
 /// This database will be shared via `Arc`, so to mutate the internal map we're
 /// going to use a `Mutex` for interior mutability.
-pub struct SessionManager {
-    sessions: HashMap<u64, Session>,
+pub struct SessionManager<'a> {
+    sessions: HashMap<u64, Session<'a>>,
 }
 
-impl SessionManager {
+impl<'a> SessionManager<'a> {
 
     pub fn new() -> Self {
         SessionManager {
@@ -48,7 +48,7 @@ impl SessionManager {
         }
     }
 
-    pub fn add_and_start(&mut self, mut session: Session) {
+    pub fn add_and_start(&mut self, mut session: Session<'a>) {
         session.start();
         self.sessions.insert(session.id, session);
     }
