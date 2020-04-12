@@ -12,17 +12,14 @@ use tokio::net::tcp::WriteHalf;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio_util::codec::LengthDelimitedCodec;
 
-use mysql::prelude::*;
-
 use crate::protocol::database::mysql::codec::{read_frame, write_frame};
-use crate::protocol::database::{DatabasePacket, CommandPacketType, PacketPayload};
-use crate::protocol::database::mysql::constant::MySQLCommandPacketType;
+use crate::protocol::database::{DatabasePacket};
 
-use crate::session::{SessionManager, Session};
 use futures::io::{Error};
-use crate::handler::{ComQuitHandler, CommandQueryHandler, CommandHandler};
+use crate::handler::{HandshakeHandler, CommandHandler, CommandRootHandler, AuthHandler};
 use std::io::ErrorKind;
-use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLHandshakePacket, MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLComQueryPacket};
+use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLComQueryPacket};
+use std::sync::Mutex;
 
 pub struct Channel<'a> {
     // socket: &'a TcpStream,
@@ -31,11 +28,10 @@ pub struct Channel<'a> {
 }
 
 impl<'a> Channel<'a> {
-
     pub fn new(socket: &'a mut TcpStream) -> Self {
         let (r, w) = socket.split();
-        let mut stream = read_frame(r);
-        let mut sink = write_frame(w);
+        let stream = read_frame(r);
+        let sink = write_frame(w);
         Channel {
             // socket: socket,
             stream: stream,
@@ -64,7 +60,6 @@ impl<'a> Channel<'a> {
     pub async fn handle(&mut self, command_packet: MySQLComQueryPacket) {
 
     }
-
 }
 
 pub struct IOContext<'a> {
@@ -74,7 +69,6 @@ pub struct IOContext<'a> {
 }
 
 impl<'a> IOContext<'a> {
-
     pub fn new(id: u64, socket: &'a mut TcpStream) -> Self {
         let client_addr = socket.peer_addr().unwrap();
         IOContext {
@@ -89,11 +83,7 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn handshake(&mut self) -> Result<(), Error> {
-        let mut handshake_packet = MySQLHandshakePacket::new(100);
-        let mut handshake_payload = MySQLPacketPayload::new();
-        let handshake_payload = DatabasePacket::encode(&mut handshake_packet, &mut handshake_payload);
-
-        self.channel.send(Some(vec![handshake_payload.get_payload()])).await
+        self.channel.send(HandshakeHandler::handle(None)).await
     }
 
     pub async fn auth(&mut self, payload: BytesMut) -> Result<(), Error> {
@@ -101,11 +91,7 @@ impl<'a> IOContext<'a> {
         let mut handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
         let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &mut handshake_response41_payload);
 
-        let mut ok_packet = MySQLOKPacket::new(handshake_response41_packet.get_sequence_id() + 1, 0, 0);
-        let mut ok_payload = MySQLPacketPayload::new();
-        let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
-
-        self.channel.send(Some(vec![ok_payload.get_payload()])).await
+        self.channel.send(AuthHandler::handle(Some(handshake_response41_packet))).await
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
@@ -118,25 +104,14 @@ impl<'a> IOContext<'a> {
         let mut command_payload = MySQLPacketPayload::new_with_payload(payload);
         let command_packet = DatabasePacket::decode(&mut command_packet, &mut command_payload);
 
-        match MySQLCommandPacketType::value_of(command_packet.get_command_type()) {
-            MySQLCommandPacketType::ComQuery => {
-                if let Err(e) = self.channel.send(CommandQueryHandler::handle(Some(command_packet))).await {
-                    println!("error on sending response; error = {:?}", e);
-                }
-            },
-            MySQLCommandPacketType::ComQuit => {
-                if let Err(e) = self.channel.send(ComQuitHandler::handle(None)).await {
-                    println!("error on sending response; error = {:?}", e);
-                }
-            },
-            _ => {}
+        if let Err(e) = self.channel.send(CommandRootHandler::handle(Some(command_packet))).await {
+            println!("error on sending response; error = {:?}", e);
         }
     }
 
     pub async fn receive(&mut self, authorized: bool) {
         if let Err(e) = self.handshake().await {
             println!("error on sending Handshake Packet response; error = {:?}", e);
-            ()
         }
 
         let mut authorized = authorized;
@@ -145,21 +120,21 @@ impl<'a> IOContext<'a> {
         // based on the values in the database.
         while let Some(result) = self.channel.stream.next().await {
             match result {
-                Ok(mut payload) => {
+                Ok(payload) => {
                     if !authorized {
                         if let Err(e) = self.auth(payload).await {
                             println!("error on sending response; error = {:?}", e);
                         }
                         authorized = true; //小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
                     } else {
-                        self.check_process_command_packet(payload).await
+                        self.check_process_command_packet(payload).await;
                     }
                 }
                 Err(e) => {
                     println!("error on decoding from socket; error = {:?}", e);
+                    break;
                 }
             }
         }
     }
-
 }

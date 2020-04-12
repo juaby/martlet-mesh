@@ -1,4 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use tokio::net::TcpStream;
 
@@ -10,16 +12,19 @@ pub mod io;
 
 lazy_static! {
     static ref IO_CONTEXT_ID: AtomicU64 = AtomicU64::new(1);
-    // static ref SESSION_MANAGER: SessionManager = SessionManager::new();
+    static ref SESSION_MANAGER: Arc<SessionManager> = Arc::new(SessionManager::new());
 }
 
 pub fn io_context_id() -> u64 {
     IO_CONTEXT_ID.fetch_add(1, Ordering::SeqCst)
 }
 
+pub fn sessions_manager() -> Arc<SessionManager> {
+    SESSION_MANAGER.clone()
+}
+
 pub async fn start_session(mut session: Session<'_>) {
     session.start().await;
-    // SESSION_MANAGER.add_and_start(session);
 }
 
 pub async fn handle(mut socket: TcpStream) {

@@ -27,13 +27,10 @@ pub fn generate_random_bytes(len: u32, seed: &mut Vec<u8>) -> Vec<u8> {
  */
 
 pub struct MySQLPacketPayload {
-
     bytes_mut: BytesMut,
-
 }
 
 impl MySQLPacketPayload {
-
     pub fn new() -> Self {
         MySQLPacketPayload {
             bytes_mut: BytesMut::new()
@@ -188,15 +185,12 @@ impl MySQLPacketPayload {
         let tmp = self.bytes_mut.bytes();
         tmp.to_vec()
     }
-
 }
 
 impl PacketPayload for MySQLPacketPayload {
-
     fn get_payload(&mut self) -> Bytes {
         self.bytes_mut.to_bytes()
     }
-
 }
 
 /**
@@ -205,18 +199,15 @@ impl PacketPayload for MySQLPacketPayload {
  * @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::Handshake">Handshake</a>
  */
 pub trait MySQLPacket {
-
     /**
      * Get sequence ID.
      *
      * @return sequence ID
      */
     fn get_sequence_id(&self) -> u32;
-
 }
 
 pub struct MySQLHandshakePacket {
-
     protocol_version: u8,
     server_version: String,
     thread_id: u32,
@@ -227,11 +218,9 @@ pub struct MySQLHandshakePacket {
     seed2: Vec<u8>,
     capability_flags_upper: u32,
     auth_plugin_name: String,
-
 }
 
 impl MySQLHandshakePacket {
-
     pub fn new(thread_id: u32) -> Self {
         let mut seed1: Vec<u8> = Vec::new();
         let mut seed2: Vec<u8> = Vec::new();
@@ -264,19 +253,15 @@ impl MySQLHandshakePacket {
             auth_plugin_name: "".to_string()
         }
     }
-
 }
 
 impl MySQLPacket for MySQLHandshakePacket {
-
     fn get_sequence_id(&self) -> u32 {
         0
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakePacket {
-
     fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.protocol_version); // protocol version
@@ -311,7 +296,6 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakePacket {
 
         payload
     }
-
 }
 
 /**
@@ -321,7 +305,6 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakePacket {
  */
 
 pub struct MySQLHandshakeResponse41Packet {
-
     sequence_id: u32,
     max_packet_size: u32,
     character_set: u8,
@@ -330,11 +313,9 @@ pub struct MySQLHandshakeResponse41Packet {
     capability_flags: u32,
     database: String,
     auth_plugin_name: String,
-
 }
 
 impl MySQLHandshakeResponse41Packet {
-
     pub fn new() -> Self {
         MySQLHandshakeResponse41Packet {
             sequence_id: 0,
@@ -347,11 +328,9 @@ impl MySQLHandshakeResponse41Packet {
             auth_plugin_name: "".to_string()
         }
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
-
     fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
         let _len = payload.get_uint_le(3);
         this.sequence_id = payload.get_uint(1) as u32 & 0xff;
@@ -385,15 +364,12 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
         };
         this
     }
-
 }
 
 impl MySQLPacket for MySQLHandshakeResponse41Packet {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
-
 }
 
 /**
@@ -402,40 +378,32 @@ impl MySQLPacket for MySQLHandshakeResponse41Packet {
  * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html">COM_QUERY field count</a>
  */
 pub struct MySQLFieldCountPacket {
-
     sequence_id: u32,
     column_count: u32,
-    
 }
 
 impl MySQLFieldCountPacket {
-    
     pub fn new(sequence_id: u32, column_count: u32) -> Self {
         MySQLFieldCountPacket {
             sequence_id,
             column_count
         }
     }
-    
 }
 
 impl MySQLPacket for MySQLFieldCountPacket {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLFieldCountPacket {
-
     fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_int_lenenc(this.column_count as usize);
 
         payload
     }
-
 }
 
 /**
@@ -445,7 +413,6 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLFieldCountPacket {
  * @see <a href="https://mariadb.com/kb/en/library/resultset/#column-definition-packet">Column definition packet</a>
  */
 pub struct MySQLColumnDefinition41Packet {
-
     catalog: String, // "def"
     next_length: u8, // 0x0c
     sequence_id: u32,
@@ -459,11 +426,9 @@ pub struct MySQLColumnDefinition41Packet {
     column_length: u32,
     column_type: u8, // MySQLColumnType
     decimals: u8,
-
 }
 
 impl MySQLColumnDefinition41Packet {
-
     pub fn new(sequence_id: u32,
                character_set: u16,
                flags: u16,
@@ -491,19 +456,15 @@ impl MySQLColumnDefinition41Packet {
             decimals
         }
     }
-
 }
 
 impl MySQLPacket for MySQLColumnDefinition41Packet {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLColumnDefinition41Packet {
-
     fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_string_lenenc(this.catalog.as_bytes());
@@ -524,7 +485,6 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLColumnDefinition41Packet {
 
         payload
     }
-
 }
 
 /**
@@ -533,32 +493,26 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLColumnDefinition41Packet {
  * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow">ResultsetRow</a>
  */
 pub struct MySQLTextResultSetRowPacket {
-
     sequence_id: u32,
     data: Vec<(bool, Vec<u8>)>, // NULL = 0xfb
 }
 
 impl MySQLTextResultSetRowPacket {
-
     pub fn new(sequence_id: u32, data: Vec<(bool, Vec<u8>)>) -> Self {
         MySQLTextResultSetRowPacket {
             sequence_id: sequence_id,
             data: data
         }
     }
-
 }
 
 impl MySQLPacket for MySQLTextResultSetRowPacket {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLTextResultSetRowPacket {
-
     fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
 
@@ -572,7 +526,6 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLTextResultSetRowPacket {
 
         payload
     }
-
 }
 
 /**
@@ -581,7 +534,6 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLTextResultSetRowPacket {
 * @see <a href="https://dev.mysql.com/doc/internals/en/packet-EOF_Packet.html">EOF Packet</a>
 */
 pub struct MySQLEOFPacket {
-
     /**
      * Header of EOF packet.
      */
@@ -589,11 +541,9 @@ pub struct MySQLEOFPacket {
     sequence_id: u32,
     warnings: u16,
     status_flags: u16,
-
 }
 
 impl MySQLEOFPacket {
-
     pub fn new(sequence_id: u32) -> Self {
         MySQLEOFPacket {
             header: 0xfe,
@@ -602,11 +552,9 @@ impl MySQLEOFPacket {
             status_flags: MySQLStatusFlag::ServerStatusAutocommit as u16
         }
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLEOFPacket {
-
     fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.header);
@@ -615,15 +563,12 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLEOFPacket {
 
         payload
     }
-
 }
 
 impl MySQLPacket for MySQLEOFPacket {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
-
 }
 
 /**
@@ -632,7 +577,6 @@ impl MySQLPacket for MySQLEOFPacket {
  * @see <a href="https://dev.mysql.com/doc/internals/en/packet-OK_Packet.html">OK Packet</a>
  */
 pub struct MySQLOKPacket {
-
     /**
      * Header of OK packet.
      */
@@ -643,11 +587,9 @@ pub struct MySQLOKPacket {
     status_flag: u32,
     warnings: u32,
     info: String,
-
 }
 
 impl MySQLOKPacket {
-
     pub fn new(sequence_id: u32, affected_rows: u64, last_insert_id: u64) -> Self {
         MySQLOKPacket {
             header: 0x00,
@@ -659,11 +601,9 @@ impl MySQLOKPacket {
             info: "".to_string()
         }
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLOKPacket {
-
     fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.header);
@@ -678,15 +618,12 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLOKPacket {
 
         payload
     }
-
 }
 
 impl MySQLPacket for MySQLOKPacket {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
-
 }
 
 /**
@@ -695,15 +632,12 @@ impl MySQLPacket for MySQLOKPacket {
  * @see <a href="https://dev.mysql.com/doc/internals/en/com-query.html">COM_QUERY</a>
  */
 pub struct MySQLComQueryPacket {
-
     sequence_id: u32,
     command_type: u8, // MySQLCommandPacketType,
     sql: Vec<u8>
-
 }
 
 impl MySQLComQueryPacket {
-
     pub fn new(command_type: u8) -> Self {
         MySQLComQueryPacket {
             sequence_id: 0,
@@ -719,23 +653,203 @@ impl MySQLComQueryPacket {
     pub fn get_command_type(&self) -> u8 {
         self.command_type
     }
-
 }
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLComQueryPacket {
-
     fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.sql = Vec::from(bytes.as_slice());
         this
     }
-
 }
 
 impl MySQLPacket for MySQLComQueryPacket {
-
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
+}
 
+/**
+ * COM_INIT_DB command packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-init-db.html#packet-COM_INIT_DB">COM_INIT_DB</a>
+ */
+pub struct MySQLComInitDbPacket {
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    schema: Vec<u8>
+}
+
+impl MySQLComInitDbPacket {
+    pub fn new(command_type: u8) -> Self {
+        MySQLComInitDbPacket {
+            sequence_id: 0,
+            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            schema: vec![]
+        }
+    }
+
+    pub fn get_schema(&self) -> Vec<u8> {
+        self.schema.clone()
+    }
+
+    pub fn get_command_type(&self) -> u8 {
+        self.command_type
+    }
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLComInitDbPacket {
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        let bytes = payload.get_remaining_bytes();
+        this.schema = Vec::from(bytes.as_slice());
+        this
+    }
+}
+
+impl MySQLPacket for MySQLComInitDbPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * COM_FIELD_LIST command packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-field-list.html">COM_FIELD_LIST</a>
+ */
+pub struct MySQLComFieldListPacket {
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    table: Vec<u8>,
+    field_wildcard: Vec<u8>
+}
+
+impl MySQLComFieldListPacket {
+    pub fn new(command_type: u8) -> Self {
+        MySQLComFieldListPacket {
+            sequence_id: 0,
+            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            table: vec![],
+            field_wildcard: vec![]
+        }
+    }
+
+    pub fn get_table(&self) -> Vec<u8> {
+        self.table.clone()
+    }
+
+    pub fn get_field_wildcard(&self) -> Vec<u8> {
+        self.field_wildcard.clone()
+    }
+
+    pub fn get_command_type(&self) -> u8 {
+        self.command_type
+    }
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLComFieldListPacket {
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        this.table = payload.get_string_nul().into_bytes();
+        let bytes = payload.get_remaining_bytes();
+        this.field_wildcard = Vec::from(bytes.as_slice());
+        this
+    }
+}
+
+impl MySQLPacket for MySQLComFieldListPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * COM_STMT_PREPARE command packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-prepare.html">COM_STMT_PREPARE</a>
+ */
+pub struct MySQLComStmtPreparePacket {
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    sql: Vec<u8>,
+}
+
+impl MySQLComStmtPreparePacket {
+    pub fn new(command_type: u8) -> Self {
+        MySQLComStmtPreparePacket {
+            sequence_id: 0,
+            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            sql: vec![],
+        }
+    }
+
+    pub fn get_sql(&self) -> Vec<u8> {
+        self.sql.clone()
+    }
+
+    pub fn get_command_type(&self) -> u8 {
+        self.command_type
+    }
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLComStmtPreparePacket {
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        let bytes = payload.get_remaining_bytes();
+        this.sql = Vec::from(bytes.as_slice());
+        this
+    }
+}
+
+impl MySQLPacket for MySQLComStmtPreparePacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * COM_STMT_EXECUTE command packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-execute.html">COM_STMT_EXECUTE</a>
+ */
+pub struct MySQLComStmtExecutePacket {
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    statement_id: u32,
+    flags: u32,
+    iteration_count: u8,
+    sql: Vec<u8>,
+}
+
+impl MySQLComStmtExecutePacket {
+    pub fn new(command_type: u8) -> Self {
+        MySQLComStmtExecutePacket {
+            sequence_id: 0,
+            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            statement_id: 0,
+            flags: 0,
+            iteration_count: 0,
+            sql: vec![],
+        }
+    }
+
+    pub fn get_sql(&self) -> Vec<u8> {
+        self.sql.clone()
+    }
+
+    pub fn get_command_type(&self) -> u8 {
+        self.command_type
+    }
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLComStmtExecutePacket {
+    fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        let bytes = payload.get_remaining_bytes();
+        this.sql = Vec::from(bytes.as_slice());
+        this
+    }
+}
+
+impl MySQLPacket for MySQLComStmtExecutePacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
 }

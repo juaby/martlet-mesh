@@ -25,6 +25,7 @@ bitflags = "1.2.1"
 r2d2_mysql = "16.0.0"
 mysqlbinlog = "0.1.5"
 rand = "0.7.3"
+rocket = "0.4.4"
 
 [build-dependencies]
 cc = "1.0"
