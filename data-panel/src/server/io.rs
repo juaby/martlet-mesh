@@ -83,12 +83,12 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn handshake(&mut self) -> Result<(), Error> {
-        self.channel.send(HandshakeHandler::handle(0, None)).await
+        self.channel.send(HandshakeHandler::handle(None, None)).await
     }
 
     pub async fn auth(&mut self, payload: BytesMut) -> Result<(), Error> {
         let mut handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
-        self.channel.send(AuthHandler::handle(0, Some(handshake_response41_payload))).await
+        self.channel.send(AuthHandler::handle(None, Some(handshake_response41_payload))).await
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
@@ -97,7 +97,7 @@ impl<'a> IOContext<'a> {
         let command_packet_type = payload.get_uint(1) as u8;
         let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
         let mut command_payload = MySQLPacketPayload::new_with_payload(payload);
-        if let Err(e) = self.channel.send(CommandRootHandler::handle(header, Some(command_payload))).await {
+        if let Err(e) = self.channel.send(CommandRootHandler::handle(Some(header), Some(command_payload))).await {
             println!("error on sending response; error = {:?}", e);
         }
     }

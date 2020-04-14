@@ -12,26 +12,27 @@ use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLCo
 pub mod rdbc;
 
 pub trait CommandHandler<P> {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<P>) -> Option<Vec<Bytes>>;
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<P>) -> Option<Vec<Bytes>>;
 }
 
 pub struct CommandRootHandler {}
 impl CommandHandler<MySQLPacketPayload> for CommandRootHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let command_packet_header = command_packet_header.unwrap();
         let command_packet = command_packet.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         match MySQLCommandPacketType::value_of(command_packet_type) {
             MySQLCommandPacketType::ComQuery => {
-                CommandQueryHandler::handle(command_packet_header, Some(command_packet))
+                CommandQueryHandler::handle(Some(command_packet_header), Some(command_packet))
             },
             MySQLCommandPacketType::ComStmtPrepare => {
-                CommandQueryHandler::handle(command_packet_header, Some(command_packet))
+                ComStmtPrepareHandler::handle(Some(command_packet_header), Some(command_packet))
             },
             MySQLCommandPacketType::ComQuit => {
-                ComQuitHandler::handle(command_packet_header, None)
+                ComQuitHandler::handle(Some(command_packet_header), None)
             },
             MySQLCommandPacketType::ComPing => {
-                ComPingHandler::handle(command_packet_header, None)
+                ComPingHandler::handle(Some(command_packet_header), None)
             },
             _ => {
                 None
@@ -42,7 +43,7 @@ impl CommandHandler<MySQLPacketPayload> for CommandRootHandler {
 
 pub struct HandshakeHandler {}
 impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut handshake_packet = MySQLHandshakePacket::new(100); // TODO how to gen thread id
         let mut handshake_payload = MySQLPacketPayload::new();
         let handshake_payload = DatabasePacket::encode(&mut handshake_packet, &mut handshake_payload);
@@ -52,7 +53,7 @@ impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
 
 pub struct AuthHandler {}
 impl CommandHandler<MySQLPacketPayload> for AuthHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, payload: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut handshake_response41_payload = payload.unwrap();
         let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
         let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &mut handshake_response41_payload);
@@ -70,7 +71,7 @@ impl CommandHandler<MySQLPacketPayload> for AuthHandler {
 
 pub struct ComQuitHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComQuitHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
         let mut ok_payload = MySQLPacketPayload::new();
         let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
@@ -80,7 +81,7 @@ impl CommandHandler<MySQLPacketPayload> for ComQuitHandler {
 
 pub struct ComPingHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComPingHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
         let mut ok_payload = MySQLPacketPayload::new();
         let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
@@ -90,14 +91,15 @@ impl CommandHandler<MySQLPacketPayload> for ComPingHandler {
 
 pub struct SetVariableHandler {}
 impl CommandHandler<MySQLPacketPayload> for SetVariableHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         unimplemented!()
     }
 }
 
 pub struct ComStmtPrepareHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut prepare_packet = MySQLComStmtPreparePacket::new(command_packet_type);
@@ -213,7 +215,8 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
 
 pub struct CommandQueryHandler {}
 impl CommandHandler<MySQLPacketPayload> for CommandQueryHandler {
-    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut query_packet = MySQLComQueryPacket::new(command_packet_type);
