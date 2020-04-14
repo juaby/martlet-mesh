@@ -20,6 +20,37 @@ pub fn generate_random_bytes(len: u32, seed: &mut Vec<u8>) -> Vec<u8> {
     seed.to_vec()
 }
 
+pub struct MySQLPacketHeader {
+    len: u64,
+    sequence_id: u32,
+    command_packet_type: u8,
+    session_id: u64
+}
+
+impl MySQLPacketHeader {
+    pub fn new(len: u64, sequence_id: u32, command_packet_type: u8, session_id: u64) -> Self {
+        MySQLPacketHeader {
+            len,
+            sequence_id,
+            command_packet_type,
+            session_id
+        }
+    }
+
+    pub fn get_len(&self) -> u64 {
+        self.len
+    }
+
+    pub fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+
+    pub fn get_command_packet_type(&self) -> u8 {
+        self.command_packet_type
+    }
+
+}
+
 /**
  * MySQL payload operation for MySQL packet data types.
  *
@@ -800,6 +831,60 @@ impl DatabasePacket<MySQLPacketPayload> for MySQLComStmtPreparePacket {
 }
 
 impl MySQLPacket for MySQLComStmtPreparePacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * COM_STMT_PREPARE_OK packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-prepare-response.html#packet-COM_STMT_PREPARE_OK">COM_STMT_PREPARE_OK</a>
+ */
+pub struct MySQLComStmtPrepareOKPacket {
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    status: u8,
+    statement_id: u32,
+    columns_count: u16,
+    parameters_count: u16,
+    warning_count: u16,
+}
+
+impl MySQLComStmtPrepareOKPacket {
+    pub fn new(sequence_id: u32,
+               command_type: u8, // MySQLCommandPacketType,
+               statement_id: u32,
+               columns_count: u16,
+               parameters_count: u16,
+               warning_count: u16) -> Self {
+        MySQLComStmtPrepareOKPacket {
+            sequence_id,
+            command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            status: 0x00,
+            statement_id,
+            columns_count,
+            parameters_count,
+            warning_count,
+        }
+    }
+}
+
+impl DatabasePacket<MySQLPacketPayload> for MySQLComStmtPrepareOKPacket {
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(this.status);
+        payload.put_u32_le(this.statement_id);
+        payload.put_u16_le(this.columns_count);
+        payload.put_u16_le(this.parameters_count);
+        let reserved: [u8; 1] = [0];
+        payload.put_slice(&reserved);
+        payload.put_u16_le(this.warning_count);
+        payload
+    }
+}
+
+impl MySQLPacket for MySQLComStmtPrepareOKPacket {
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }

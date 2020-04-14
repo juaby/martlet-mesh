@@ -18,7 +18,7 @@ use crate::protocol::database::{DatabasePacket};
 use futures::io::{Error};
 use crate::handler::{HandshakeHandler, CommandHandler, CommandRootHandler, AuthHandler};
 use std::io::ErrorKind;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLComQueryPacket};
+use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLComQueryPacket, MySQLPacketHeader};
 use std::sync::Mutex;
 
 pub struct Channel<'a> {
@@ -92,11 +92,12 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
-        let _len = payload.get_uint_le(3);
-        let _sequence_id = payload.get_uint(1) as u32 & 0xff;
+        let len = payload.get_uint_le(3);
+        let sequence_id = payload.get_uint(1) as u32 & 0xff;
         let command_packet_type = payload.get_uint(1) as u8;
+        let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
         let mut command_payload = MySQLPacketPayload::new_with_payload(payload);
-        if let Err(e) = self.channel.send(CommandRootHandler::handle(command_packet_type, Some(command_payload))).await {
+        if let Err(e) = self.channel.send(CommandRootHandler::handle(header, Some(command_payload))).await {
             println!("error on sending response; error = {:?}", e);
         }
     }

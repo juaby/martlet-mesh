@@ -1,5 +1,5 @@
 use bytes::{Bytes};
-use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLComQueryPacket, MySQLFieldCountPacket, MySQLPacketPayload, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket, MySQLOKPacket, MySQLHandshakePacket, MySQLHandshakeResponse41Packet};
+use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLComQueryPacket, MySQLFieldCountPacket, MySQLPacketPayload, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket, MySQLOKPacket, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLPacketHeader, MySQLComStmtPreparePacket, MySQLComStmtPrepareOKPacket};
 use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
 use mysql;
 use mysql::{Conn, Value};
@@ -7,31 +7,31 @@ use sqlparser::ast::Statement;
 use sqlparser::ast::SetVariableValue::Ident;
 use crate::parser;
 use mysql::prelude::Queryable;
-use crate::protocol::database::mysql::constant::MySQLCommandPacketType;
+use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLColumnType, CHARSET};
 
 pub mod rdbc;
 
 pub trait CommandHandler<P> {
-    fn handle(command_packet_type: u8, command_packet: Option<P>) -> Option<Vec<Bytes>>;
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<P>) -> Option<Vec<Bytes>>;
 }
 
 pub struct CommandRootHandler {}
-
 impl CommandHandler<MySQLPacketPayload> for CommandRootHandler {
-    fn handle(command_packet_type: u8, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let command_packet = command_packet.unwrap();
+        let command_packet_type = command_packet_header.get_command_packet_type();
         match MySQLCommandPacketType::value_of(command_packet_type) {
             MySQLCommandPacketType::ComQuery => {
-                CommandQueryHandler::handle(command_packet_type, Some(command_packet))
+                CommandQueryHandler::handle(command_packet_header, Some(command_packet))
             },
             MySQLCommandPacketType::ComStmtPrepare => {
-                CommandQueryHandler::handle(command_packet_type, Some(command_packet))
+                CommandQueryHandler::handle(command_packet_header, Some(command_packet))
             },
             MySQLCommandPacketType::ComQuit => {
-                ComQuitHandler::handle(command_packet_type, None)
+                ComQuitHandler::handle(command_packet_header, None)
             },
             MySQLCommandPacketType::ComPing => {
-                ComPingHandler::handle(command_packet_type, None)
+                ComPingHandler::handle(command_packet_header, None)
             },
             _ => {
                 None
@@ -41,9 +41,8 @@ impl CommandHandler<MySQLPacketPayload> for CommandRootHandler {
 }
 
 pub struct HandshakeHandler {}
-
 impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
-    fn handle(command_packet_type: u8, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut handshake_packet = MySQLHandshakePacket::new(100); // TODO how to gen thread id
         let mut handshake_payload = MySQLPacketPayload::new();
         let handshake_payload = DatabasePacket::encode(&mut handshake_packet, &mut handshake_payload);
@@ -52,9 +51,8 @@ impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
 }
 
 pub struct AuthHandler {}
-
 impl CommandHandler<MySQLPacketPayload> for AuthHandler {
-    fn handle(command_packet_type: u8, payload: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, payload: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut handshake_response41_payload = payload.unwrap();
         let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
         let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &mut handshake_response41_payload);
@@ -71,9 +69,8 @@ impl CommandHandler<MySQLPacketPayload> for AuthHandler {
 }
 
 pub struct ComQuitHandler {}
-
 impl CommandHandler<MySQLPacketPayload> for ComQuitHandler {
-    fn handle(command_packet_type: u8, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
         let mut ok_payload = MySQLPacketPayload::new();
         let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
@@ -82,9 +79,8 @@ impl CommandHandler<MySQLPacketPayload> for ComQuitHandler {
 }
 
 pub struct ComPingHandler {}
-
 impl CommandHandler<MySQLPacketPayload> for ComPingHandler {
-    fn handle(command_packet_type: u8, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
         let mut ok_payload = MySQLPacketPayload::new();
         let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
@@ -93,17 +89,132 @@ impl CommandHandler<MySQLPacketPayload> for ComPingHandler {
 }
 
 pub struct SetVariableHandler {}
-
 impl CommandHandler<MySQLPacketPayload> for SetVariableHandler {
-    fn handle(command_packet_type: u8, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
         unimplemented!()
     }
 }
 
-pub struct CommandQueryHandler {}
+pub struct ComStmtPrepareHandler {}
+impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let command_packet_type = command_packet_header.get_command_packet_type();
+        let mut command_payload = command_packet.unwrap();
+        let mut prepare_packet = MySQLComStmtPreparePacket::new(command_packet_type);
+        let command_packet = DatabasePacket::decode(&mut prepare_packet, &mut command_payload);
+        // TODO
+        let statements = parser::mysql::parser(String::from_utf8_lossy(command_packet.get_sql().as_slice()).as_ref());
 
+        let mut payloads: Vec<Bytes> = Vec::new();
+
+        let parameters_count = 1;
+        let columns_count = 1;
+
+        let mut global_sequence_id: u32 = 1;
+        let statement_id = 1u32;
+
+        let mut prepare_ok_packet = MySQLComStmtPrepareOKPacket::new(
+                global_sequence_id,
+                command_packet_type,
+                statement_id,
+                columns_count,
+                parameters_count,
+                0);
+        let mut prepare_ok_payload = MySQLPacketPayload::new();
+        let prepare_ok_payload = DatabasePacket::encode(&mut prepare_ok_packet, &mut prepare_ok_payload);
+
+        payloads.push(prepare_ok_payload.get_payload());
+        
+        if parameters_count > 0 {
+            for _ in 0..parameters_count {
+                global_sequence_id = global_sequence_id + 1;
+                let sequence_id = global_sequence_id;
+                let character_set: u16 = CHARSET as u16;
+                let flags: u16 = 0;
+                let schema: String = "".to_string();
+                let table: String = "".to_string();
+                let org_table: String = "".to_string();
+                let name: String = "?".to_string();
+                let org_name: String = "".to_string();
+                let column_length: u32 = 0;
+                let column_type: u8 = MySQLColumnType::MysqlTypeVarString as u8; // MySQLColumnType
+                let decimals: u8 = 0;
+                let mut column_definition41_packet =
+                    MySQLColumnDefinition41Packet::new(
+                        sequence_id,
+                        character_set,
+                        flags,
+                        schema,
+                        table,
+                        org_table,
+                        name,
+                        org_name,
+                        column_length,
+                        column_type, // MySQLColumnType
+                        decimals
+                    );
+                let mut column_definition41_payload = MySQLPacketPayload::new();
+                let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
+
+                payloads.push(column_definition41_payload.get_payload());
+            }
+            global_sequence_id = global_sequence_id + 1;
+            let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
+            let mut eof_payload = MySQLPacketPayload::new();
+            let eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
+
+            payloads.push(eof_payload.get_payload());
+        }
+
+        if columns_count > 0 {
+            for _ in 0..columns_count {
+                global_sequence_id = global_sequence_id + 1;
+                let sequence_id = global_sequence_id;
+                let character_set: u16 = CHARSET as u16;
+                let flags: u16 = 0;
+                let schema: String = "".to_string();
+                let table: String = "".to_string();
+                let org_table: String = "".to_string();
+                let name: String = "?".to_string();
+                let org_name: String = "".to_string();
+                let column_length: u32 = 0;
+                let column_type: u8 = MySQLColumnType::MysqlTypeVarString as u8; // MySQLColumnType
+                let decimals: u8 = 0;
+                let mut column_definition41_packet =
+                    MySQLColumnDefinition41Packet::new(
+                        sequence_id,
+                        character_set,
+                        flags,
+                        schema,
+                        table,
+                        org_table,
+                        name,
+                        org_name,
+                        column_length,
+                        column_type, // MySQLColumnType
+                        decimals
+                    );
+                let mut column_definition41_payload = MySQLPacketPayload::new();
+                let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
+
+                payloads.push(column_definition41_payload.get_payload());
+            }
+            global_sequence_id = global_sequence_id + 1;
+            let mut eof_packet = MySQLEOFPacket::new(global_sequence_id);
+            let mut eof_payload = MySQLPacketPayload::new();
+            let eof_payload = DatabasePacket::encode(&mut eof_packet, &mut eof_payload);
+
+            payloads.push(eof_payload.get_payload());
+        }
+
+        Some(payloads)
+    }
+}
+
+pub struct CommandQueryHandler {}
 impl CommandHandler<MySQLPacketPayload> for CommandQueryHandler {
-    fn handle(command_packet_type: u8, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: MySQLPacketHeader, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut query_packet = MySQLComQueryPacket::new(command_packet_type);
         let command_packet = DatabasePacket::decode(&mut query_packet, &mut command_payload);
