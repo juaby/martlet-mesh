@@ -83,28 +83,20 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn handshake(&mut self) -> Result<(), Error> {
-        self.channel.send(HandshakeHandler::handle(None)).await
+        self.channel.send(HandshakeHandler::handle(0, None)).await
     }
 
     pub async fn auth(&mut self, payload: BytesMut) -> Result<(), Error> {
-        let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
         let mut handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
-        let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &mut handshake_response41_payload);
-
-        self.channel.send(AuthHandler::handle(Some(handshake_response41_packet))).await
+        self.channel.send(AuthHandler::handle(0, Some(handshake_response41_payload))).await
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
         let _len = payload.get_uint_le(3);
         let _sequence_id = payload.get_uint(1) as u32 & 0xff;
-
         let command_packet_type = payload.get_uint(1) as u8;
-
-        let mut command_packet = MySQLComQueryPacket::new(command_packet_type);
         let mut command_payload = MySQLPacketPayload::new_with_payload(payload);
-        let command_packet = DatabasePacket::decode(&mut command_packet, &mut command_payload);
-
-        if let Err(e) = self.channel.send(CommandRootHandler::handle(Some(command_packet))).await {
+        if let Err(e) = self.channel.send(CommandRootHandler::handle(command_packet_type, Some(command_payload))).await {
             println!("error on sending response; error = {:?}", e);
         }
     }
