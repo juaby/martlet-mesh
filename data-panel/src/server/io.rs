@@ -87,7 +87,7 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn auth(&mut self, payload: BytesMut) -> Result<(), Error> {
-        let mut handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
+        let handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
         self.channel.send(AuthHandler::handle(None, Some(handshake_response41_payload))).await
     }
 
@@ -96,7 +96,7 @@ impl<'a> IOContext<'a> {
         let sequence_id = payload.get_uint(1) as u32 & 0xff;
         let command_packet_type = payload.get_uint(1) as u8;
         let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
-        let mut command_payload = MySQLPacketPayload::new_with_payload(payload);
+        let command_payload = MySQLPacketPayload::new_with_payload(payload);
         if let Err(e) = self.channel.send(CommandRootHandler::handle(Some(header), Some(command_payload))).await {
             println!("error on sending response; error = {:?}", e);
         }

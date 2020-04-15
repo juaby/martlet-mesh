@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 use crate::server::io::IOContext;
-use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, Arc};
 use crate::server;
 
 pub struct SessionStatistics {
-    id: u64,
-    authorized: AtomicBool
 }
 
 pub struct Session<'a> {
@@ -55,7 +53,46 @@ impl SessionManager {
     pub fn add_and_start(&mut self, mut session: Session<'_>) {
         let sm = server::sessions_manager();
         let mut sessions = sm.sessions.lock().unwrap();
-        sessions.insert(session.id, SessionStatistics { id: session.id, authorized: Default::default() });
+        sessions.insert(session.id, SessionStatistics {});
         session.start();
+    }
+}
+
+lazy_static! {
+    static ref PREPARE_STATEMENT_ID: AtomicU64 = AtomicU64::new(1);
+}
+
+pub fn prepare_statement_id() -> u64 {
+    PREPARE_STATEMENT_ID.fetch_add(1, Ordering::SeqCst)
+}
+
+pub struct PrepareStatementContext {
+    statement_id: u64,
+    parameters_count: u16,
+    columns_count: u16,
+    sql: Vec<u8>,
+}
+
+impl PrepareStatementContext {
+    pub fn new(statement_id: u64,
+               parameters_count: u16,
+               columns_count: u16,
+               sql: Vec<u8>) -> Self {
+        PrepareStatementContext {
+            statement_id,
+            parameters_count,
+            columns_count,
+            sql
+        }
+    }
+
+    pub fn get_sql(&self) -> Vec<u8> {
+        self.sql.clone()
+    }
+    pub fn get_parameters_count(&self) -> u16 {
+        self.parameters_count
+    }
+    pub fn get_columns_count(&self) -> u16 {
+        self.columns_count
     }
 }

@@ -105,7 +105,9 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
         let mut prepare_packet = MySQLComStmtPreparePacket::new(command_packet_type);
         let command_packet = DatabasePacket::decode(&mut prepare_packet, &mut command_payload);
         // TODO
-        let statements = parser::mysql::parser(String::from_utf8_lossy(command_packet.get_sql().as_slice()).as_ref());
+        let sql = command_packet.get_sql();
+        let sql = String::from_utf8_lossy(sql.as_slice());
+        let statements = parser::mysql::parser(sql.as_ref());
 
         let mut payloads: Vec<Bytes> = Vec::new();
 
