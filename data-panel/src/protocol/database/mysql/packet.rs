@@ -3,6 +3,7 @@ use crate::protocol::database::{PacketPayload, DatabasePacket};
 
 use rand::Rng;
 use bytes::{BytesMut, Buf, BufMut, Bytes};
+use crate::session::get_session_prepare_stmt_context_parameters_count;
 
 const PAYLOAD_LENGTH: u32 = 3;
 const SEQUENCE_LENGTH: u32 = 1;
@@ -930,6 +931,9 @@ impl MySQLComStmtExecutePacket {
 
 impl DatabasePacket<MySQLPacketPayload> for MySQLComStmtExecutePacket {
     fn decode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        this.statement_id = payload.get_uint_le(4) as u32;
+        this.flags = payload.get_uint_le(1) as u32;
+        let parameters_count = get_session_prepare_stmt_context_parameters_count(0, this.statement_id as u64); // TODO
         let bytes = payload.get_remaining_bytes();
         this.sql = Vec::from(bytes.as_slice());
         this
