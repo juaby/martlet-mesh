@@ -49,6 +49,9 @@ impl MySQLPacketHeader {
         self.command_packet_type
     }
 
+    pub fn get_session_id(&self) -> u64 {
+        self.session_id
+    }
 }
 
 /**

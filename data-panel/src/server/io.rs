@@ -20,6 +20,7 @@ use crate::handler::{HandshakeHandler, CommandHandler, CommandRootHandler, AuthH
 use std::io::ErrorKind;
 use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLComQueryPacket, MySQLPacketHeader};
 use std::sync::Mutex;
+use crate::session::{set_session_authorized, get_session_authorized};
 
 pub struct Channel<'a> {
     // socket: &'a TcpStream,
@@ -119,6 +120,7 @@ impl<'a> IOContext<'a> {
                             println!("error on sending response; error = {:?}", e);
                         }
                         authorized = true; //小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
+                        set_session_authorized(self.id(), true);
                     } else {
                         self.check_process_command_packet(payload).await;
                     }
