@@ -106,7 +106,7 @@ pub struct PrepareStatementContext {
     parameters_count: u16,
     columns_count: u16,
     sql: Vec<u8>,
-    columnTypes: Vec<(u8, u8)>
+    parameter_types: Vec<(u8, u8)>
 }
 
 impl PrepareStatementContext {
@@ -119,7 +119,7 @@ impl PrepareStatementContext {
             parameters_count,
             columns_count,
             sql,
-            columnTypes: vec![]
+            parameter_types: vec![]
         }
     }
 
@@ -141,7 +141,7 @@ lazy_static! {
     static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID: Arc<RwLock<HashMap<u64, AtomicU64>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT: Arc<RwLock<HashMap<String, u16>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref SESSION_PREPARESTMTCONTEXT_SQL: Arc<RwLock<HashMap<String, Vec<u8>>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_COLUMNTYPES: Arc<RwLock<HashMap<String, Vec<(u8, u8)>>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES: Arc<RwLock<HashMap<String, Vec<(u8, u8)>>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
 pub fn session_authorized_manager() -> Arc<RwLock<HashMap<u64, bool>>> {
@@ -213,21 +213,21 @@ pub fn get_session_prepare_stmt_context_sql(session_id: u64, statement_id: u64) 
     sql.to_vec()
 }
 
-pub fn session_prepare_stmt_context_column_types_manager() -> Arc<RwLock<HashMap<String, Vec<(u8, u8)>>>> {
-    SESSION_PREPARESTMTCONTEXT_COLUMNTYPES.clone()
+pub fn session_prepare_stmt_context_parameter_types_manager() -> Arc<RwLock<HashMap<String, Vec<(u8, u8)>>>> {
+    SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES.clone()
 }
 
-pub fn set_session_prepare_stmt_context_column_types(session_id: u64, statement_id: u64, column_types: Vec<(u8, u8)>) {
-    let session_prepare_stmt_context_column_types_manager = session_prepare_stmt_context_column_types_manager();
-    let mut session_prepare_stmt_context_column_types_manager = session_prepare_stmt_context_column_types_manager.write().unwrap();
+pub fn set_session_prepare_stmt_context_parameter_types(session_id: u64, statement_id: u64, parameter_types: Vec<(u8, u8)>) {
+    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
+    let mut session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.write().unwrap();
     let key = format!("{}_{}", session_id, statement_id);
-    session_prepare_stmt_context_column_types_manager.insert(key, column_types);
+    session_prepare_stmt_context_parameter_types_manager.insert(key, parameter_types);
 }
 
-pub fn get_session_prepare_stmt_context_column_types(session_id: u64, statement_id: u64) -> Vec<(u8, u8)> {
-    let session_prepare_stmt_context_column_types_manager = session_prepare_stmt_context_column_types_manager();
-    let session_prepare_stmt_context_column_types_manager = session_prepare_stmt_context_column_types_manager.read().unwrap();
+pub fn get_session_prepare_stmt_context_parameter_types(session_id: u64, statement_id: u64) -> Vec<(u8, u8)> {
+    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
+    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.read().unwrap();
     let key = format!("{}_{}", session_id, statement_id);
-    let column_types = session_prepare_stmt_context_column_types_manager.get(&key).unwrap().clone();
-    column_types.to_vec()
+    let parameter_types = session_prepare_stmt_context_parameter_types_manager.get(&key).unwrap().clone();
+    parameter_types.to_vec()
 }

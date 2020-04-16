@@ -1,5 +1,17 @@
 use bytes::{Bytes};
-use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLComQueryPacket, MySQLFieldCountPacket, MySQLPacketPayload, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket, MySQLOKPacket, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLPacketHeader, MySQLComStmtPreparePacket, MySQLComStmtPrepareOKPacket};
+use crate::protocol::database::mysql::packet::{MySQLPacket,
+                                               MySQLComQueryPacket,
+                                               MySQLFieldCountPacket,
+                                               MySQLPacketPayload,
+                                               MySQLColumnDefinition41Packet,
+                                               MySQLEOFPacket,
+                                               MySQLTextResultSetRowPacket,
+                                               MySQLOKPacket,
+                                               MySQLHandshakePacket,
+                                               MySQLHandshakeResponse41Packet,
+                                               MySQLPacketHeader,
+                                               MySQLComStmtPreparePacket,
+                                               MySQLComStmtPrepareOKPacket};
 use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
 use mysql;
 use mysql::{Conn, Value};
@@ -8,7 +20,9 @@ use sqlparser::ast::SetVariableValue::Ident;
 use crate::parser;
 use mysql::prelude::Queryable;
 use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLColumnType, CHARSET};
-use crate::session::{get_session_prepare_stmt_context_statement_id, set_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_sql};
+use crate::session::{get_session_prepare_stmt_context_statement_id,
+                     set_session_prepare_stmt_context_parameters_count,
+                     set_session_prepare_stmt_context_sql};
 
 pub mod rdbc;
 
@@ -55,9 +69,10 @@ impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
 pub struct AuthHandler {}
 impl CommandHandler<MySQLPacketPayload> for AuthHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let mut command_packet_header = command_packet_header.unwrap();
         let mut handshake_response41_payload = payload.unwrap();
         let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
-        let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &mut handshake_response41_payload);
+        let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &command_packet_header, &mut handshake_response41_payload);
 
 
         // TODO Auth Discovery
@@ -104,7 +119,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut prepare_packet = MySQLComStmtPreparePacket::new(command_packet_type);
-        let command_packet = DatabasePacket::decode(&mut prepare_packet, &mut command_payload);
+        let command_packet = DatabasePacket::decode(&mut prepare_packet, &command_packet_header, &mut command_payload);
         // TODO
         let sql = command_packet.get_sql();
         let sql = String::from_utf8_lossy(sql.as_slice());
@@ -227,7 +242,7 @@ impl CommandHandler<MySQLPacketPayload> for CommandQueryHandler {
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut query_packet = MySQLComQueryPacket::new(command_packet_type);
-        let command_packet = DatabasePacket::decode(&mut query_packet, &mut command_payload);
+        let command_packet = DatabasePacket::decode(&mut query_packet, &command_packet_header, &mut command_payload);
 
         let mut payloads = Vec::new();
         let database_url = "mysql://root:root@localhost:8306/test";
