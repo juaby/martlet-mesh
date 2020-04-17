@@ -1,9 +1,10 @@
-use crate::protocol::database::mysql::constant::{MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLNewParametersBoundFlag};
+use crate::protocol::database::mysql::constant::{MySQLColumnType, MySQLColumnFlags, MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLNewParametersBoundFlag};
 use crate::protocol::database::{PacketPayload, DatabasePacket};
 
 use rand::Rng;
 use bytes::{BytesMut, Buf, BufMut, Bytes};
 use crate::session::{get_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_parameter_types};
+use crate::protocol::database::mysql::binary::PrepareParamValue;
 
 const PAYLOAD_LENGTH: u32 = 3;
 const SEQUENCE_LENGTH: u32 = 1;
@@ -103,8 +104,24 @@ impl MySQLPacketPayload {
         self.bytes_mut.get_uint_le(n)
     }
 
+    pub fn get_int_le(&mut self, n: usize) -> i64 {
+        self.bytes_mut.get_int_le(n)
+    }
+
+    pub fn get_f32_le(&mut self) -> f32 {
+        self.bytes_mut.get_f32_le()
+    }
+
+    pub fn get_f64_le(&mut self) -> f64 {
+        self.bytes_mut.get_f64_le()
+    }
+
     pub fn get_uint(&mut self, n: usize) -> u64 {
         self.bytes_mut.get_uint(n)
+    }
+
+    pub fn get_int(&mut self, n: usize) -> i64 {
+        self.bytes_mut.get_int(n)
     }
 
     pub fn advance(&mut self, n: usize) {
@@ -903,12 +920,12 @@ pub struct MySQLComStmtExecutePacket {
     sequence_id: u32,
     command_type: u8, // MySQLCommandPacketType,
     statement_id: u32,
-    flags: u32,
+    flags: u16,
     null_bit_map: Vec<u8>,
     new_parameters_bound_flag: u8,
-    iteration_count: u32,
+    iteration_count: u8,
     sql: Vec<u8>,
-    parameters: Vec<Bytes>
+    parameters: Vec<PrepareParamValue>
 }
 
 impl MySQLComStmtExecutePacket {
@@ -938,16 +955,16 @@ impl MySQLComStmtExecutePacket {
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecutePacket {
     fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
         this.statement_id = payload.get_uint_le(4) as u32;
-        this.flags = payload.get_uint_le(1) as u32;
-        this.iteration_count = payload.get_uint_le(1) as u32;
-        // assert_eq!(1 == this.iteration_count); //TODO
+        this.flags = payload.get_uint_le(1) as u16;
+        this.iteration_count = payload.get_uint_le(1) as u8;
+        assert_eq!(1, this.iteration_count);
         let session_id = header.get_session_id();
-        let parameters_count = get_session_prepare_stmt_context_parameters_count(session_id, this.statement_id as u64);
-        /**
-         * Null bitmap for MySQL.
-         *
-         * @see <a href="https://dev.mysql.com/doc/internals/en/null-bitmap.html">NULL-Bitmap</a>
-         */
+        let parameters_count = get_session_prepare_stmt_context_parameters_count(this.statement_id as u64);
+        ///
+        /// Null bitmap for MySQL.
+        ///
+        /// @see <a href="https://dev.mysql.com/doc/internals/en/null-bitmap.html">NULL-Bitmap</a>
+        ///
         let mut null_bit_map: Vec<u8> = vec![];
         let offset = 0;
         if parameters_count > 0 {
@@ -957,20 +974,29 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecu
                 null_bit_map[i] = payload.get_uint(1) as u8 & 0xff;
             }
             let new_parameters_bound_flag = payload.get_uint(1) as u8 & 0xff;
+            let mut parameter_types = Vec::with_capacity(parameters_count as usize);
             if MySQLNewParametersBoundFlag::ParameterTypeExist as u8 == new_parameters_bound_flag {
-                let mut parameter_types = Vec::with_capacity(parameters_count as usize);
                 for i in 0..parameters_count {
                     let column_type = payload.get_uint(1) as u8 & 0xff;
                     let unsigned_flag = payload.get_uint(1) as u8 & 0xff;
                     parameter_types.push((column_type, unsigned_flag));
                 }
-                set_session_prepare_stmt_context_parameter_types(session_id, this.statement_id as u64, parameter_types);
+                set_session_prepare_stmt_context_parameter_types( this.statement_id as u64, parameter_types);
             }
-        } else {
-
+            this.parameters = Vec::with_capacity(parameters_count as usize);
+            for i in 0..parameters_count {
+                let null_byte_position = (i + offset) / 8;
+                let null_bit_position = (i + offset) % 8;
+                if (null_bit_map.get(null_byte_position).unwrap() & (1 << null_bit_position)) != 0 {
+                    this.parameters.push(PrepareParamValue::NULL);
+                } else {
+                    let (column_type, unsigned_flag) = parameter_types.get(i).unwrap();
+                    let column_flags = MySQLColumnFlags::from_bits_truncate(unsigned_flag);
+                    let param_value = PrepareParamValue::read_bin(payload, MySQLColumnType::from(column_type), column_flags.contains(MySQLColumnFlags::UNSIGNED_FLAG)).unwrap();
+                    this.parameters.push(param_value);
+                }
+            }
         }
-        let bytes = payload.get_remaining_bytes();
-        this.sql = Vec::from(bytes.as_slice());
         this
     }
 }

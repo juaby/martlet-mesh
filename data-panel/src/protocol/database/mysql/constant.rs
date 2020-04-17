@@ -17,7 +17,6 @@ pub const CHARSET: u8 = 0x21;
 /// @see <a href="https://dev.mysql.com/doc/internals/en/status-flags.html#packet-Protocol::StatusFlags">StatusFlags</a>
 ///
 pub enum MySQLStatusFlag {
-
     ServerStatusInTrans = 0x0001,
     ServerStatusAutocommit = 0x0002,
     ServerMoreResultsExists = 0x0008,
@@ -40,7 +39,6 @@ pub enum MySQLStatusFlag {
 /// @see <a href="https://dev.mysql.com/doc/internals/en/capability-flags.html#packet-Protocol::CapabilityFlags">CapabilityFlags</a>
 ///
 pub enum MySQLCapabilityFlag {
-
     ClientLongPassword = 0x00000001,
     ClientFoundRows = 0x00000002,
     ClientLongFlag = 0x00000004,
@@ -85,7 +83,6 @@ pub enum MySQLAuthenticationMethod {
 }
 
 impl MySQLAuthenticationMethod {
-
     pub fn value(&self) -> &str {
         match *self {
             MySQLAuthenticationMethod::OldPasswordAuthentication => "mysql_old_password",
@@ -95,17 +92,16 @@ impl MySQLAuthenticationMethod {
             MySQLAuthenticationMethod::SHA256 => "sha256_password",
         }
     }
-
 }
 
 ///
 /// Column types for MySQL.
 ///
 /// @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html#column-type">Column Type</a>
-/// @see <a href="https://github.com/apache/incubator-shardingsphere/issues/4355"></a>
 ///
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+#[repr(u8)]
 pub enum MySQLColumnType {
-
     MysqlTypeDecimal = 0x00,
     MysqlTypeTiny = 0x01,
     MysqlTypeShort = 0x02,
@@ -126,6 +122,7 @@ pub enum MySQLColumnType {
     MysqlTypeTimestamp2 = 0x11,
     MysqlTypeDatetime2 = 0x12,
     MysqlTypeTime2 = 0x13,
+    MysqlTypeJson = 0xf5,
     MysqlTypeNewDecimal = 0xf6,
     MysqlTypeEnum = 0xf7,
     MysqlTypeSet = 0xf8,
@@ -136,7 +133,45 @@ pub enum MySQLColumnType {
     MysqlTypeVarString = 0xfd,
     MysqlTypeString = 0xfe,
     MysqlTypeGeometry = 0xff,
+}
 
+impl From<u8> for MySQLColumnType {
+    fn from(x: u8) -> MySQLColumnType {
+        match x {
+            0x00_u8 => MySQLColumnType::MysqlTypeDecimal,
+            0x01u8 => MySQLColumnType::MysqlTypeTiny,
+            0x02u8 => MySQLColumnType::MysqlTypeShort,
+            0x03u8 => MySQLColumnType::MysqlTypeLong,
+            0x04u8 => MySQLColumnType::MysqlTypeFloat,
+            0x05u8 => MySQLColumnType::MysqlTypeDouble,
+            0x06u8 => MySQLColumnType::MysqlTypeNull,
+            0x07u8 => MySQLColumnType::MysqlTypeTimestamp,
+            0x08u8 => MySQLColumnType::MysqlTypeLonglong,
+            0x09u8 => MySQLColumnType::MysqlTypeInt24,
+            0x0au8 => MySQLColumnType::MysqlTypeDate,
+            0x0bu8 => MySQLColumnType::MysqlTypeTime,
+            0x0cu8 => MySQLColumnType::MysqlTypeDatetime,
+            0x0du8 => MySQLColumnType::MysqlTypeYear,
+            0x0eu8 => MySQLColumnType::MysqlTypeNewDate,
+            0x0fu8 => MySQLColumnType::MysqlTypeVarchar,
+            0x10u8 => MySQLColumnType::MysqlTypeBit,
+            0x11u8 => MySQLColumnType::MysqlTypeTimestamp2,
+            0x12u8 => MySQLColumnType::MysqlTypeDatetime2,
+            0x13u8 => MySQLColumnType::MysqlTypeTime2,
+            0xf5u8 => MySQLColumnType::MysqlTypeJson,
+            0xf6u8 => MySQLColumnType::MysqlTypeNewDecimal,
+            0xf7u8 => MySQLColumnType::MysqlTypeEnum,
+            0xf8u8 => MySQLColumnType::MysqlTypeSet,
+            0xf9u8 => MySQLColumnType::MysqlTypeTinyBlob,
+            0xfau8 => MySQLColumnType::MysqlTypeMediumBlob,
+            0xfbu8 => MySQLColumnType::MysqlTypeLongBlob,
+            0xfcu8 => MySQLColumnType::MysqlTypeBlob,
+            0xfdu8 => MySQLColumnType::MysqlTypeVarString,
+            0xfeu8 => MySQLColumnType::MysqlTypeString,
+            0xffu8 => MySQLColumnType::MysqlTypeGeometry,
+            _ => panic!("Unknown column type {}", x),
+        }
+    }
 }
 
 ///
@@ -145,17 +180,14 @@ pub enum MySQLColumnType {
 /// @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-execute.html">COM_STMT_EXECUTE</a>
 ///
 pub enum MySQLNewParametersBoundFlag {
-
     ParameterTypeExist = 1,
     ParameterTypeNotExist = 0,
-
 }
 
 /**
  * Command packet type for MySQL.
  */
 pub enum MySQLCommandPacketType {
-
     /**
      * COM_SLEEP.
      *
@@ -348,7 +380,6 @@ pub enum MySQLCommandPacketType {
      * @see <a href="https://dev.mysql.com/doc/internals/en/com-reset-connection.html">COM_RESET_CONNECTION</a>
      */
     ComResetConnection = 0x1f,
-
 }
 
 impl CommandPacketType for MySQLCommandPacketType {
@@ -391,5 +422,57 @@ impl CommandPacketType for MySQLCommandPacketType {
             }
         }
     }
+}
 
+bitflags! {
+    /// MySql column flags
+    pub struct MySQLColumnFlags: u16 {
+        /// Field can't be NULL.
+        const NOT_NULL_FLAG         = 1u16;
+
+        /// Field is part of a primary key.
+        const PRI_KEY_FLAG          = 2u16;
+
+        /// Field is part of a unique key.
+        const UNIQUE_KEY_FLAG       = 4u16;
+
+        /// Field is part of a key.
+        const MULTIPLE_KEY_FLAG     = 8u16;
+
+        /// Field is a blob.
+        const BLOB_FLAG             = 16u16;
+
+        /// Field is unsigned.
+        const UNSIGNED_FLAG         = 32u16;
+
+        /// Field is zerofill.
+        const ZEROFILL_FLAG         = 64u16;
+
+        /// Field is binary.
+        const BINARY_FLAG           = 128u16;
+
+        /// Field is an enum.
+        const ENUM_FLAG             = 256u16;
+
+        /// Field is a autoincrement field.
+        const AUTO_INCREMENT_FLAG   = 512u16;
+
+        /// Field is a timestamp.
+        const TIMESTAMP_FLAG        = 1024u16;
+
+        /// Field is a set.
+        const SET_FLAG              = 2048u16;
+
+        /// Field doesn't have default value.
+        const NO_DEFAULT_VALUE_FLAG = 4096u16;
+
+        /// Field is set to NOW on UPDATE.
+        const ON_UPDATE_NOW_FLAG    = 8192u16;
+
+        /// Intern; Part of some key.
+        const PART_KEY_FLAG         = 16384u16;
+
+        /// Field is num (for clients).
+        const NUM_FLAG              = 32768u16;
+    }
 }

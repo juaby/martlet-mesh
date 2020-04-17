@@ -20,9 +20,7 @@ use sqlparser::ast::SetVariableValue::Ident;
 use crate::parser;
 use mysql::prelude::Queryable;
 use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLColumnType, CHARSET};
-use crate::session::{get_session_prepare_stmt_context_statement_id,
-                     set_session_prepare_stmt_context_parameters_count,
-                     set_session_prepare_stmt_context_sql};
+use crate::session::{get_session_prepare_stmt_context_statement_id, set_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_sql, session_prepare_stmt_context_statement_id};
 
 pub mod rdbc;
 
@@ -132,10 +130,14 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
 
         let mut global_sequence_id: u32 = 1;
         let session_id = command_packet_header.get_session_id();
-        let statement_id = get_session_prepare_stmt_context_statement_id(session_id);
-
-        set_session_prepare_stmt_context_parameters_count(session_id, statement_id, parameters_count);
-        set_session_prepare_stmt_context_sql(session_id, statement_id, command_packet.get_sql());
+        let mut statement_id = 0;
+        if let Some(cache_statement_id) = get_session_prepare_stmt_context_statement_id(sql.to_string()) {
+            statement_id = cache_statement_id;
+        } else {
+            statement_id = session_prepare_stmt_context_statement_id();
+            set_session_prepare_stmt_context_parameters_count(statement_id, parameters_count);
+            set_session_prepare_stmt_context_sql(statement_id, command_packet.get_sql());
+        }
 
         let mut prepare_ok_packet = MySQLComStmtPrepareOKPacket::new(
             global_sequence_id,

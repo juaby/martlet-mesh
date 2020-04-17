@@ -11,11 +11,11 @@ pub mod service;
 pub mod io;
 
 lazy_static! {
-    static ref IO_CONTEXT_ID: AtomicU64 = AtomicU64::new(1);
+    static ref IO_CONTEXT_ID_GENERATOR: AtomicU64 = AtomicU64::new(1);
 }
 
 pub fn io_context_id() -> u64 {
-    IO_CONTEXT_ID.fetch_add(1, Ordering::SeqCst)
+    IO_CONTEXT_ID_GENERATOR.fetch_add(1, Ordering::SeqCst)
 }
 
 pub async fn start_session(mut session: Session<'_>) {
@@ -24,7 +24,6 @@ pub async fn start_session(mut session: Session<'_>) {
 
 pub fn create_session_ctx(session_id: u64) {
     set_session_authorized(session_id, false);
-    set_session_prepare_stmt_context_statement_id(session_id);
 }
 
 pub async fn handle(mut socket: TcpStream) {

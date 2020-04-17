@@ -138,10 +138,11 @@ impl PrepareStatementContext {
 
 lazy_static! {
     static ref SESSION_CONTEXT_AUTHORIZED: Arc<RwLock<HashMap<u64, bool>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID: Arc<RwLock<HashMap<u64, AtomicU64>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT: Arc<RwLock<HashMap<String, u16>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_SQL: Arc<RwLock<HashMap<String, Vec<u8>>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES: Arc<RwLock<HashMap<String, Vec<(u8, u8)>>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID_GENERATOR: AtomicU64 = AtomicU64::new(1);
+    static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID: Arc<RwLock<HashMap<String, u64>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT: Arc<RwLock<HashMap<u64, u16>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_SQL: Arc<RwLock<HashMap<u64, Vec<u8>>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES: Arc<RwLock<HashMap<u64, Vec<(u8, u8)>>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
 pub fn session_authorized_manager() -> Arc<RwLock<HashMap<u64, bool>>> {
@@ -160,74 +161,76 @@ pub fn get_session_authorized(session_id: u64) -> bool {
     *session_authorized_manager.get(&session_id).unwrap()
 }
 
-pub fn session_prepare_stmt_context_statement_id_manager() -> Arc<RwLock<HashMap<u64, AtomicU64>>> {
+pub fn session_prepare_stmt_context_statement_id() -> u64 {
+    SESSION_PREPARESTMTCONTEXT_STATEMENT_ID_GENERATOR.fetch_add(1, Ordering::SeqCst)
+}
+
+pub fn session_prepare_stmt_context_statement_id_manager() -> Arc<RwLock<HashMap<String, u64>>> {
     SESSION_PREPARESTMTCONTEXT_STATEMENT_ID.clone()
 }
 
-pub fn set_session_prepare_stmt_context_statement_id(session_id: u64) {
+pub fn set_session_prepare_stmt_context_statement_id(sql: String, statement_id: u64) {
     let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
     let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.write().unwrap();
-    session_prepare_stmt_context_statement_id_manager.insert(session_id, AtomicU64::new(1));
+    session_prepare_stmt_context_statement_id_manager.insert(sql, statement_id);
 }
 
-pub fn get_session_prepare_stmt_context_statement_id(session_id: u64) -> u64 {
+pub fn get_session_prepare_stmt_context_statement_id(sql: String) -> Option<u64> {
     let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
     let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.read().unwrap();
-    session_prepare_stmt_context_statement_id_manager.get(&session_id).unwrap().fetch_add(1, Ordering::SeqCst)
+    if let Some(statement_id) = session_prepare_stmt_context_statement_id_manager.get(sql.as_str()) {
+        Some(*statement_id)
+    } else {
+        None
+    }
 }
 
-pub fn session_prepare_stmt_context_parameters_count_manager() -> Arc<RwLock<HashMap<String, u16>>> {
+pub fn session_prepare_stmt_context_parameters_count_manager() -> Arc<RwLock<HashMap<u64, u16>>> {
     SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT.clone()
 }
 
-pub fn set_session_prepare_stmt_context_parameters_count(session_id: u64, statement_id: u64, parameters_count: u16) {
+pub fn set_session_prepare_stmt_context_parameters_count(statement_id: u64, parameters_count: u16) {
     let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
     let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.write().unwrap();
-    let key = format!("{}_{}", session_id, statement_id);
-    session_prepare_stmt_context_parameters_count_manager.insert(key, parameters_count);
+    session_prepare_stmt_context_parameters_count_manager.insert(statement_id, parameters_count);
 }
 
-pub fn get_session_prepare_stmt_context_parameters_count(session_id: u64, statement_id: u64) -> u16 {
+pub fn get_session_prepare_stmt_context_parameters_count(statement_id: u64) -> u16 {
     let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
     let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.read().unwrap();
-    let key = format!("{}_{}", session_id, statement_id);
-    *session_prepare_stmt_context_parameters_count_manager.get(&key).unwrap()
+    *session_prepare_stmt_context_parameters_count_manager.get(&statement_id).unwrap()
 }
 
-pub fn session_prepare_stmt_context_sql_manager() -> Arc<RwLock<HashMap<String, Vec<u8>>>> {
-    SESSION_PREPARESTMTCONTEXT_SQL.clone()
+pub fn session_prepare_stmt_context_statement_sql_manager() -> Arc<RwLock<HashMap<u64, Vec<u8>>>> {
+    SESSION_PREPARESTMTCONTEXT_STATEMENT_SQL.clone()
 }
 
-pub fn set_session_prepare_stmt_context_sql(session_id: u64, statement_id: u64, sql: Vec<u8>) {
-    let session_prepare_stmt_context_sql_manager = session_prepare_stmt_context_sql_manager();
-    let mut session_prepare_stmt_context_sql_manager = session_prepare_stmt_context_sql_manager.write().unwrap();
-    let key = format!("{}_{}", session_id, statement_id);
-    session_prepare_stmt_context_sql_manager.insert(key, sql);
+pub fn set_session_prepare_stmt_context_sql(statement_id: u64, sql: Vec<u8>) {
+    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
+    let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.write().unwrap();
+    session_prepare_stmt_context_statement_sql_manager.insert(statement_id, sql);
 }
 
-pub fn get_session_prepare_stmt_context_sql(session_id: u64, statement_id: u64) -> Vec<u8> {
-    let session_prepare_stmt_context_sql_manager = session_prepare_stmt_context_sql_manager();
-    let mut session_prepare_stmt_context_sql_manager = session_prepare_stmt_context_sql_manager.read().unwrap();
-    let key = format!("{}_{}", session_id, statement_id);
-    let sql = session_prepare_stmt_context_sql_manager.get(&key).unwrap();
+pub fn get_session_prepare_stmt_context_sql(statement_id: u64) -> Vec<u8> {
+    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
+    let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.read().unwrap();
+    let sql = session_prepare_stmt_context_statement_sql_manager.get(&statement_id).unwrap();
     sql.to_vec()
 }
 
-pub fn session_prepare_stmt_context_parameter_types_manager() -> Arc<RwLock<HashMap<String, Vec<(u8, u8)>>>> {
+pub fn session_prepare_stmt_context_parameter_types_manager() -> Arc<RwLock<HashMap<u64, Vec<(u8, u8)>>>> {
     SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES.clone()
 }
 
-pub fn set_session_prepare_stmt_context_parameter_types(session_id: u64, statement_id: u64, parameter_types: Vec<(u8, u8)>) {
+pub fn set_session_prepare_stmt_context_parameter_types(statement_id: u64, parameter_types: Vec<(u8, u8)>) {
     let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
     let mut session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.write().unwrap();
-    let key = format!("{}_{}", session_id, statement_id);
-    session_prepare_stmt_context_parameter_types_manager.insert(key, parameter_types);
+    session_prepare_stmt_context_parameter_types_manager.insert(statement_id, parameter_types);
 }
 
-pub fn get_session_prepare_stmt_context_parameter_types(session_id: u64, statement_id: u64) -> Vec<(u8, u8)> {
+pub fn get_session_prepare_stmt_context_parameter_types(statement_id: u64) -> Vec<(u8, u8)> {
     let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
     let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.read().unwrap();
-    let key = format!("{}_{}", session_id, statement_id);
-    let parameter_types = session_prepare_stmt_context_parameter_types_manager.get(&key).unwrap().clone();
+    let parameter_types = session_prepare_stmt_context_parameter_types_manager.get(&statement_id).unwrap().clone();
     parameter_types.to_vec()
 }
