@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use crate::server::io::IOContext;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, Arc, RwLock};
-use crate::server;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 
 pub struct SessionContext {
     id: u64,

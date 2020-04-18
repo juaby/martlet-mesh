@@ -5,6 +5,7 @@ use rand::Rng;
 use bytes::{BytesMut, Buf, BufMut, Bytes};
 use crate::session::{get_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_parameter_types};
 use crate::protocol::database::mysql::binary::PrepareParamValue;
+use crate::protocol::database::mysql::binary;
 
 const PAYLOAD_LENGTH: u32 = 3;
 const SEQUENCE_LENGTH: u32 = 1;
@@ -89,6 +90,22 @@ impl MySQLPacketPayload {
 
     pub fn put_u32_le(&mut self, val: u32) {
         self.bytes_mut.put_u32_le(val);
+    }
+
+    pub fn put_i32_le(&mut self, val: i32) {
+        self.bytes_mut.put_i32_le(val);
+    }
+
+    pub fn put_u64_le(&mut self, val: u64) {
+        self.bytes_mut.put_u64_le(val);
+    }
+
+    pub fn put_i64_le(&mut self, val: i64) {
+        self.bytes_mut.put_i64_le(val);
+    }
+
+    pub fn put_f64_le(&mut self, val: f64) {
+        self.bytes_mut.put_f64_le(val);
     }
 
     pub fn put_slice(&mut self, val: &[u8]) {
@@ -384,8 +401,6 @@ impl MySQLHandshakeResponse41Packet {
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
     fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
-        let _len = payload.get_uint_le(3);
-        this.sequence_id = payload.get_uint(1) as u32 & 0xff;
         this.capability_flags = payload.get_uint_le(4) as u32;
         this.max_packet_size = payload.get_uint_le(4) as u32;
         this.character_set = payload.get_uint(1) as u8 & 0xff;
@@ -950,6 +965,10 @@ impl MySQLComStmtExecutePacket {
     pub fn get_command_type(&self) -> u8 {
         self.command_type
     }
+
+    pub fn get_parameters(&self) -> Vec<PrepareParamValue> {
+        self.parameters.clone()
+    }
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecutePacket {
@@ -967,32 +986,33 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecu
         ///
         let mut null_bit_map: Vec<u8> = vec![];
         let offset = 0;
-        if parameters_count > 0 {
-            let len = (parameters_count + offset + 7) / 8;
-            null_bit_map = Vec::with_capacity(len as usize);
-            for i in 0..len as usize {
+        let num_params = parameters_count as usize;
+        if num_params > 0 {
+            let len = (num_params + offset + 7) / 8;
+            null_bit_map = Vec::with_capacity(len);
+            for i in 0..len {
                 null_bit_map[i] = payload.get_uint(1) as u8 & 0xff;
             }
             let new_parameters_bound_flag = payload.get_uint(1) as u8 & 0xff;
-            let mut parameter_types = Vec::with_capacity(parameters_count as usize);
+            let mut parameter_types = Vec::with_capacity(num_params);
             if MySQLNewParametersBoundFlag::ParameterTypeExist as u8 == new_parameters_bound_flag {
-                for i in 0..parameters_count {
+                for _ in 0..num_params {
                     let column_type = payload.get_uint(1) as u8 & 0xff;
                     let unsigned_flag = payload.get_uint(1) as u8 & 0xff;
                     parameter_types.push((column_type, unsigned_flag));
                 }
-                set_session_prepare_stmt_context_parameter_types( this.statement_id as u64, parameter_types);
+                set_session_prepare_stmt_context_parameter_types( this.statement_id as u64, parameter_types.clone());
             }
-            this.parameters = Vec::with_capacity(parameters_count as usize);
-            for i in 0..parameters_count {
+            this.parameters = Vec::with_capacity(num_params);
+            for i in 0..num_params {
                 let null_byte_position = (i + offset) / 8;
                 let null_bit_position = (i + offset) % 8;
-                if (null_bit_map.get(null_byte_position).unwrap() & (1 << null_bit_position)) != 0 {
+                if (null_bit_map[null_byte_position] & (1 << null_bit_position) as u8) != 0 {
                     this.parameters.push(PrepareParamValue::NULL);
                 } else {
                     let (column_type, unsigned_flag) = parameter_types.get(i).unwrap();
-                    let column_flags = MySQLColumnFlags::from_bits_truncate(unsigned_flag);
-                    let param_value = PrepareParamValue::read_bin(payload, MySQLColumnType::from(column_type), column_flags.contains(MySQLColumnFlags::UNSIGNED_FLAG)).unwrap();
+                    let column_flags = MySQLColumnFlags::from_bits_truncate(*unsigned_flag as u16);
+                    let param_value = binary::read_bin(payload, MySQLColumnType::from(*column_type), column_flags.contains(MySQLColumnFlags::UNSIGNED_FLAG)).unwrap();
                     this.parameters.push(param_value);
                 }
             }
@@ -1004,5 +1024,62 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecu
 impl MySQLPacket for MySQLComStmtExecutePacket {
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
+    }
+}
+
+/**
+ * Binary result set row packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/binary-protocol-resultset-row.html">Binary Protocol ResultSet Row</a>
+ */
+pub struct MySQLBinaryResultSetRowPacket {
+    sequence_id: u32,
+    data: Vec<PrepareParamValue>,
+}
+
+impl MySQLBinaryResultSetRowPacket {
+    pub fn new(sequence_id: u32, data: Vec<PrepareParamValue>) -> Self {
+        MySQLBinaryResultSetRowPacket {
+            sequence_id: sequence_id,
+            data: data
+        }
+    }
+}
+
+impl MySQLPacket for MySQLBinaryResultSetRowPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLBinaryResultSetRowPacket {
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(0x00); // PACKET_HEADER
+
+        let null_bitmap_offset = 2;
+        let columns_numbers = this.data.len();
+        let len = (columns_numbers + null_bitmap_offset + 7) / 8;
+        let mut null_bit_map: Vec<u8> = Vec::with_capacity(len);
+        for i in 0..len {
+            null_bit_map[i] = 0u8;
+            if let Some(v) = this.data.get(i) {
+                if *v == PrepareParamValue::NULL {
+                    let null_byte_position = (i + null_bitmap_offset) / 8;
+                    let null_bit_position = (i + null_bitmap_offset) % 8;
+                    null_bit_map[null_byte_position] = (1 << null_bit_position) as u8;
+                }
+            }
+        }
+
+        for v in null_bit_map.iter() {
+            payload.put_u8(*v);
+        }
+
+        for v in this.data.iter() {
+            binary::write_bin(v, payload);
+        }
+
+        payload
     }
 }

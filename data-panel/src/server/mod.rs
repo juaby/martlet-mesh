@@ -1,10 +1,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
 
 use tokio::net::TcpStream;
 
-use crate::session::{SessionManager, Session, set_session_authorized, set_session_prepare_stmt_context_statement_id};
+use crate::session::{Session, set_session_authorized};
 use crate::server::io::IOContext;
 
 pub mod service;

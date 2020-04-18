@@ -13,14 +13,12 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio_util::codec::LengthDelimitedCodec;
 
 use crate::protocol::database::mysql::codec::{read_frame, write_frame};
-use crate::protocol::database::{DatabasePacket};
 
 use futures::io::{Error};
 use crate::handler::{HandshakeHandler, CommandHandler, CommandRootHandler, AuthHandler};
 use std::io::ErrorKind;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLHandshakeResponse41Packet, MySQLComQueryPacket, MySQLPacketHeader};
-use std::sync::Mutex;
-use crate::session::{set_session_authorized, get_session_authorized};
+use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLComQueryPacket, MySQLPacketHeader};
+use crate::session::{set_session_authorized};
 
 pub struct Channel<'a> {
     // socket: &'a TcpStream,
@@ -87,9 +85,14 @@ impl<'a> IOContext<'a> {
         self.channel.send(HandshakeHandler::handle(None, None)).await
     }
 
-    pub async fn auth(&mut self, payload: BytesMut) -> Result<(), Error> {
+    pub async fn auth(&mut self, mut payload: BytesMut) -> Result<(), Error> {
+        let len = payload.get_uint_le(3);
+        let sequence_id = payload.get_uint(1) as u32 & 0xff;
+        let command_packet_type = 0u8;
+        let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
+
         let handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
-        self.channel.send(AuthHandler::handle(None, Some(handshake_response41_payload))).await
+        self.channel.send(AuthHandler::handle(Some(header), Some(handshake_response41_payload))).await
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
