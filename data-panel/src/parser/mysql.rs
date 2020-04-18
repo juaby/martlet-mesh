@@ -15,6 +15,7 @@ impl Dialect for MySqlDialect {
             || ch == '_'
             || ch == '$'
             || ch == '@'
+            || ch == '?'
             || (ch >= '\u{0080}' && ch <= '\u{ffff}')
     }
 

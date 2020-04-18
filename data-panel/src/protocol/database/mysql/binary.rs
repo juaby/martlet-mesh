@@ -33,7 +33,7 @@ pub fn read_bin(payload: &mut MySQLPacketPayload, column_type: MySQLColumnType, 
         | MySQLColumnType::MysqlTypeJson => Ok(PrepareParamValue::Bytes(payload.get_string_lenenc())),
         MySQLColumnType::MysqlTypeTiny => {
             if unsigned {
-                Ok(PrepareParamValue::UInt(payload.get_uint(1)))
+                Ok(PrepareParamValue::UInt(payload.get_uint(1) & 0xff))
             } else {
                 Ok(PrepareParamValue::Int(payload.get_int(1)))
             }

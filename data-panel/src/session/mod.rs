@@ -138,6 +138,7 @@ impl PrepareStatementContext {
 lazy_static! {
     static ref SESSION_CONTEXT_AUTHORIZED: Arc<RwLock<HashMap<u64, bool>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID_GENERATOR: AtomicU64 = AtomicU64::new(1);
+
     static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID: Arc<RwLock<HashMap<String, u64>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT: Arc<RwLock<HashMap<u64, u16>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_SQL: Arc<RwLock<HashMap<u64, Vec<u8>>>> = Arc::new(RwLock::new(HashMap::new()));
@@ -164,6 +165,17 @@ pub fn session_prepare_stmt_context_statement_id() -> u64 {
     SESSION_PREPARESTMTCONTEXT_STATEMENT_ID_GENERATOR.fetch_add(1, Ordering::SeqCst)
 }
 
+///
+/// clear prepare stmt context
+///
+pub fn clear_session_prepare_stmt_context(statement_id: u64) {
+    let sql = get_session_prepare_stmt_context_sql(statement_id);
+    remove_session_prepare_stmt_context_sql(statement_id);
+    remove_session_prepare_stmt_context_parameter_types(statement_id);
+    remove_session_prepare_stmt_context_parameters_count(statement_id);
+    remove_session_prepare_stmt_context_statement_id(String::from_utf8_lossy(sql.as_slice()).to_string());
+}
+
 pub fn session_prepare_stmt_context_statement_id_manager() -> Arc<RwLock<HashMap<String, u64>>> {
     SESSION_PREPARESTMTCONTEXT_STATEMENT_ID.clone()
 }
@@ -184,6 +196,15 @@ pub fn get_session_prepare_stmt_context_statement_id(sql: String) -> Option<u64>
     }
 }
 
+pub fn remove_session_prepare_stmt_context_statement_id(sql: String) {
+    let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
+    let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.write().unwrap();
+    session_prepare_stmt_context_statement_id_manager.remove(sql.as_str()).unwrap();
+}
+
+///
+/// session_prepare_stmt_context_parameters_count_manager
+///
 pub fn session_prepare_stmt_context_parameters_count_manager() -> Arc<RwLock<HashMap<u64, u16>>> {
     SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT.clone()
 }
@@ -200,6 +221,15 @@ pub fn get_session_prepare_stmt_context_parameters_count(statement_id: u64) -> u
     *session_prepare_stmt_context_parameters_count_manager.get(&statement_id).unwrap()
 }
 
+pub fn remove_session_prepare_stmt_context_parameters_count(statement_id: u64) {
+    let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
+    let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.write().unwrap();
+    session_prepare_stmt_context_parameters_count_manager.remove(&statement_id).unwrap();
+}
+
+///
+/// prepare_stmt_context_statement_sql_manager
+///
 pub fn session_prepare_stmt_context_statement_sql_manager() -> Arc<RwLock<HashMap<u64, Vec<u8>>>> {
     SESSION_PREPARESTMTCONTEXT_STATEMENT_SQL.clone()
 }
@@ -217,6 +247,15 @@ pub fn get_session_prepare_stmt_context_sql(statement_id: u64) -> Vec<u8> {
     sql.to_vec()
 }
 
+pub fn remove_session_prepare_stmt_context_sql(statement_id: u64) {
+    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
+    let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.write().unwrap();
+    session_prepare_stmt_context_statement_sql_manager.remove(&statement_id).unwrap();
+}
+
+///
+/// prepare_stmt_context_parameter_types_manager
+///
 pub fn session_prepare_stmt_context_parameter_types_manager() -> Arc<RwLock<HashMap<u64, Vec<(u8, u8)>>>> {
     SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES.clone()
 }
@@ -232,4 +271,10 @@ pub fn get_session_prepare_stmt_context_parameter_types(statement_id: u64) -> Ve
     let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.read().unwrap();
     let parameter_types = session_prepare_stmt_context_parameter_types_manager.get(&statement_id).unwrap().clone();
     parameter_types.to_vec()
+}
+
+pub fn remove_session_prepare_stmt_context_parameter_types(statement_id: u64) {
+    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
+    let mut session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.write().unwrap();
+    session_prepare_stmt_context_parameter_types_manager.remove(&statement_id).unwrap();
 }

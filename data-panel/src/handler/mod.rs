@@ -1,5 +1,5 @@
 use bytes::{Bytes};
-use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLComQueryPacket, MySQLFieldCountPacket, MySQLPacketPayload, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket, MySQLOKPacket, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLPacketHeader, MySQLComStmtPreparePacket, MySQLComStmtPrepareOKPacket, MySQLComStmtExecutePacket, MySQLBinaryResultSetRowPacket};
+use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLComQueryPacket, MySQLFieldCountPacket, MySQLPacketPayload, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLTextResultSetRowPacket, MySQLOKPacket, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLPacketHeader, MySQLComStmtPreparePacket, MySQLComStmtPrepareOKPacket, MySQLComStmtExecutePacket, MySQLBinaryResultSetRowPacket, MySQLComStmtClosePacket};
 use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
 use mysql;
 use mysql::{Conn, Value, Params};
@@ -8,7 +8,7 @@ use sqlparser::ast::SetVariableValue::Ident;
 use crate::parser;
 use mysql::prelude::Queryable;
 use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLColumnType, CHARSET};
-use crate::session::{get_session_prepare_stmt_context_statement_id, set_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_sql, session_prepare_stmt_context_statement_id};
+use crate::session::{get_session_prepare_stmt_context_statement_id, set_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_sql, session_prepare_stmt_context_statement_id, clear_session_prepare_stmt_context};
 use crate::protocol::database::mysql::binary::PrepareParamValue;
 
 pub mod rdbc;
@@ -32,6 +32,9 @@ impl CommandHandler<MySQLPacketPayload> for CommandRootHandler {
             },
             MySQLCommandPacketType::ComStmtExecute => {
                 ComStmtExecuteHandler::handle(Some(command_packet_header), Some(command_packet))
+            },
+            MySQLCommandPacketType::ComStmtClose => {
+                ComStmtCloseHandler::handle(Some(command_packet_header), Some(command_packet))
             },
             MySQLCommandPacketType::ComQuit => {
                 ComQuitHandler::handle(Some(command_packet_header), None)
@@ -541,5 +544,20 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
             _ => {}
         }
         Some(payloads)
+    }
+}
+
+pub struct ComStmtCloseHandler {}
+impl CommandHandler<MySQLPacketPayload> for ComStmtCloseHandler {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+        let command_packet_header = command_packet_header.unwrap();
+        let command_packet_type = command_packet_header.get_command_packet_type();
+        let mut command_payload = command_packet.unwrap();
+        let mut stmt_close_packet = MySQLComStmtClosePacket::new(command_packet_type);
+        let stmt_close_packet = DatabasePacket::decode(&mut stmt_close_packet, &command_packet_header, &mut command_payload);
+
+        clear_session_prepare_stmt_context(stmt_close_packet.get_statement_id() as u64);
+
+        None
     }
 }

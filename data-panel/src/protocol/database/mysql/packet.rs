@@ -3,7 +3,7 @@ use crate::protocol::database::{PacketPayload, DatabasePacket};
 
 use rand::Rng;
 use bytes::{BytesMut, Buf, BufMut, Bytes};
-use crate::session::{get_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_parameter_types};
+use crate::session::{get_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_parameter_types, get_session_prepare_stmt_context_parameter_types, get_session_prepare_stmt_context_sql};
 use crate::protocol::database::mysql::binary::PrepareParamValue;
 use crate::protocol::database::mysql::binary;
 
@@ -403,7 +403,7 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeRes
     fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
         this.capability_flags = payload.get_uint_le(4) as u32;
         this.max_packet_size = payload.get_uint_le(4) as u32;
-        this.character_set = payload.get_uint(1) as u8 & 0xff;
+        this.character_set = (payload.get_uint(1) & 0xff) as u8;
         payload.advance(23);
 
         // string with nul
@@ -938,7 +938,7 @@ pub struct MySQLComStmtExecutePacket {
     flags: u16,
     null_bit_map: Vec<u8>,
     new_parameters_bound_flag: u8,
-    iteration_count: u8,
+    iteration_count: u32,
     sql: Vec<u8>,
     parameters: Vec<PrepareParamValue>
 }
@@ -973,9 +973,11 @@ impl MySQLComStmtExecutePacket {
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecutePacket {
     fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
-        this.flags = payload.get_uint_le(1) as u16;
-        this.iteration_count = payload.get_uint_le(1) as u8;
+        this.sql = get_session_prepare_stmt_context_sql(this.statement_id as u64);
+        this.flags = (payload.get_uint(1) & 0xff) as u16;
+        this.iteration_count = payload.get_uint_le(4) as u32;
         assert_eq!(1, this.iteration_count);
         let session_id = header.get_session_id();
         let parameters_count = get_session_prepare_stmt_context_parameters_count(this.statement_id as u64);
@@ -989,19 +991,21 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecu
         let num_params = parameters_count as usize;
         if num_params > 0 {
             let len = (num_params + offset + 7) / 8;
-            null_bit_map = Vec::with_capacity(len);
+            null_bit_map = vec![0u8; len]; //Vec::with_capacity(len);
             for i in 0..len {
-                null_bit_map[i] = payload.get_uint(1) as u8 & 0xff;
+                null_bit_map[i] = (payload.get_uint(1) & 0xff) as u8;
             }
-            let new_parameters_bound_flag = payload.get_uint(1) as u8 & 0xff;
+            let new_parameters_bound_flag = (payload.get_uint(1) & 0xff) as u8;
             let mut parameter_types = Vec::with_capacity(num_params);
             if MySQLNewParametersBoundFlag::ParameterTypeExist as u8 == new_parameters_bound_flag {
                 for _ in 0..num_params {
-                    let column_type = payload.get_uint(1) as u8 & 0xff;
-                    let unsigned_flag = payload.get_uint(1) as u8 & 0xff;
+                    let column_type = (payload.get_uint(1) & 0xff) as u8;
+                    let unsigned_flag = (payload.get_uint(1) & 0xff) as u8;
                     parameter_types.push((column_type, unsigned_flag));
                 }
                 set_session_prepare_stmt_context_parameter_types( this.statement_id as u64, parameter_types.clone());
+            } else {
+                parameter_types = get_session_prepare_stmt_context_parameter_types(this.statement_id as u64);
             }
             this.parameters = Vec::with_capacity(num_params);
             for i in 0..num_params {
@@ -1060,7 +1064,7 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLBinaryResult
         let null_bitmap_offset = 2;
         let columns_numbers = this.data.len();
         let len = (columns_numbers + null_bitmap_offset + 7) / 8;
-        let mut null_bit_map: Vec<u8> = Vec::with_capacity(len);
+        let mut null_bit_map = vec![0u8; len];//Vec::with_capacity(len);
         for i in 0..len {
             null_bit_map[i] = 0u8;
             if let Some(v) = this.data.get(i) {
@@ -1081,5 +1085,45 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLBinaryResult
         }
 
         payload
+    }
+}
+
+/**
+ * COM_STMT_CLOSE command packet for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-close.html">COM_STMT_CLOSE</a>
+ */
+pub struct MySQLComStmtClosePacket {
+    sequence_id: u32,
+    command_type: u8, // MySQLCommandPacketType,
+    statement_id: u32,
+}
+
+impl MySQLComStmtClosePacket {
+    pub fn new(command_type: u8) -> Self {
+        MySQLComStmtClosePacket {
+            sequence_id: 0,
+            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
+            statement_id: 0,
+        }
+    }
+
+    pub fn get_statement_id(&self) -> u32 {
+        self.statement_id
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtClosePacket {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        this.sequence_id = header.sequence_id;
+        this.statement_id = payload.get_uint_le(4) as u32;
+
+        this
+    }
+}
+
+impl MySQLPacket for MySQLComStmtClosePacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
     }
 }
