@@ -15,10 +15,11 @@ use tokio_util::codec::LengthDelimitedCodec;
 use crate::protocol::database::mysql::codec::{read_frame, write_frame};
 
 use futures::io::{Error};
-use crate::handler::{HandshakeHandler, CommandHandler, CommandRootHandler, AuthHandler};
 use std::io::ErrorKind;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLComQueryPacket, MySQLPacketHeader};
+use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader};
 use crate::session::{set_session_authorized};
+use crate::handler::mysql::{AuthHandler, CommandRootHandler, CommandHandler, HandshakeHandler};
+use crate::protocol::database::mysql::packet::text::MySQLComQueryPacket;
 
 pub struct Channel<'a> {
     // socket: &'a TcpStream,

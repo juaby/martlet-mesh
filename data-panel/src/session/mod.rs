@@ -199,7 +199,7 @@ pub fn get_session_prepare_stmt_context_statement_id(sql: String) -> Option<u64>
 pub fn remove_session_prepare_stmt_context_statement_id(sql: String) {
     let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
     let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.write().unwrap();
-    session_prepare_stmt_context_statement_id_manager.remove(sql.as_str()).unwrap();
+    session_prepare_stmt_context_statement_id_manager.remove(sql.as_str());
 }
 
 ///
@@ -224,7 +224,7 @@ pub fn get_session_prepare_stmt_context_parameters_count(statement_id: u64) -> u
 pub fn remove_session_prepare_stmt_context_parameters_count(statement_id: u64) {
     let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
     let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.write().unwrap();
-    session_prepare_stmt_context_parameters_count_manager.remove(&statement_id).unwrap();
+    session_prepare_stmt_context_parameters_count_manager.remove(&statement_id);
 }
 
 ///
@@ -250,7 +250,7 @@ pub fn get_session_prepare_stmt_context_sql(statement_id: u64) -> Vec<u8> {
 pub fn remove_session_prepare_stmt_context_sql(statement_id: u64) {
     let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
     let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.write().unwrap();
-    session_prepare_stmt_context_statement_sql_manager.remove(&statement_id).unwrap();
+    session_prepare_stmt_context_statement_sql_manager.remove(&statement_id);
 }
 
 ///
@@ -276,5 +276,5 @@ pub fn get_session_prepare_stmt_context_parameter_types(statement_id: u64) -> Ve
 pub fn remove_session_prepare_stmt_context_parameter_types(statement_id: u64) {
     let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
     let mut session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.write().unwrap();
-    session_prepare_stmt_context_parameter_types_manager.remove(&statement_id).unwrap();
+    session_prepare_stmt_context_parameter_types_manager.remove(&statement_id);
 }

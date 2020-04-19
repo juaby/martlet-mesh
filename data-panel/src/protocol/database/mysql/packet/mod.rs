@@ -1,11 +1,10 @@
-use crate::protocol::database::mysql::constant::{MySQLColumnType, MySQLColumnFlags, MySQLStatusFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLCapabilityFlag, NUL, SEED, MySQLNewParametersBoundFlag};
+use rand::Rng;
+use crate::protocol::database::mysql::constant::{SEED, NUL, MySQLCapabilityFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLStatusFlag};
+use bytes::{BytesMut, BufMut, Buf, Bytes};
 use crate::protocol::database::{PacketPayload, DatabasePacket};
 
-use rand::Rng;
-use bytes::{BytesMut, Buf, BufMut, Bytes};
-use crate::session::{get_session_prepare_stmt_context_parameters_count, set_session_prepare_stmt_context_parameter_types, get_session_prepare_stmt_context_parameter_types, get_session_prepare_stmt_context_sql};
-use crate::protocol::database::mysql::binary::PrepareParamValue;
-use crate::protocol::database::mysql::binary;
+pub mod text;
+pub mod binary;
 
 const PAYLOAD_LENGTH: u32 = 3;
 const SEQUENCE_LENGTH: u32 = 1;
@@ -440,6 +439,104 @@ impl MySQLPacket for MySQLHandshakeResponse41Packet {
 }
 
 /**
+* EOF packet protocol for MySQL.
+*
+* @see <a href="https://dev.mysql.com/doc/internals/en/packet-EOF_Packet.html">EOF Packet</a>
+*/
+pub struct MySQLEOFPacket {
+    /**
+     * Header of EOF packet.
+     */
+    header: u8, // 0xfe;
+    sequence_id: u32,
+    warnings: u16,
+    status_flags: u16,
+}
+
+impl MySQLEOFPacket {
+    pub fn new(sequence_id: u32) -> Self {
+        MySQLEOFPacket {
+            header: 0xfe,
+            sequence_id,
+            warnings: 0,
+            status_flags: MySQLStatusFlag::ServerStatusAutocommit as u16
+        }
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLEOFPacket {
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(this.header);
+        payload.put_u16_le(this.warnings);
+        payload.put_u16_le(this.status_flags);
+
+        payload
+    }
+}
+
+impl MySQLPacket for MySQLEOFPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * OK packet protocol for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/packet-OK_Packet.html">OK Packet</a>
+ */
+pub struct MySQLOKPacket {
+    /**
+     * Header of OK packet.
+     */
+    header: u8,
+    sequence_id: u32,
+    affected_rows: u64,
+    last_insert_id: u64,
+    status_flag: u32,
+    warnings: u32,
+    info: String,
+}
+
+impl MySQLOKPacket {
+    pub fn new(sequence_id: u32, affected_rows: u64, last_insert_id: u64) -> Self {
+        MySQLOKPacket {
+            header: 0x00,
+            sequence_id: sequence_id,
+            affected_rows: affected_rows,
+            last_insert_id: last_insert_id,
+            status_flag: MySQLStatusFlag::ServerStatusAutocommit as u32,
+            warnings: 0,
+            info: "".to_string()
+        }
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLOKPacket {
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(this.header);
+
+        payload.put_int_lenenc(this.affected_rows as usize);
+        payload.put_int_lenenc(this.last_insert_id as usize);
+
+        payload.put_u16_le(this.status_flag as u16);
+        payload.put_u16_le(this.warnings as u16);
+
+        payload.put_slice(this.info.as_bytes());
+
+        payload
+    }
+}
+
+impl MySQLPacket for MySQLOKPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
  * COM_QUERY response field count packet for MySQL.
  *
  * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html">COM_QUERY field count</a>
@@ -555,188 +652,6 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLColumnDefini
 }
 
 /**
- * Text result set row packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow">ResultsetRow</a>
- */
-pub struct MySQLTextResultSetRowPacket {
-    sequence_id: u32,
-    data: Vec<(bool, Vec<u8>)>, // NULL = 0xfb
-}
-
-impl MySQLTextResultSetRowPacket {
-    pub fn new(sequence_id: u32, data: Vec<(bool, Vec<u8>)>) -> Self {
-        MySQLTextResultSetRowPacket {
-            sequence_id: sequence_id,
-            data: data
-        }
-    }
-}
-
-impl MySQLPacket for MySQLTextResultSetRowPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLTextResultSetRowPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
-        payload.put_u8(this.get_sequence_id() as u8); // seq
-
-        for (null, col_v) in this.data.iter() {
-            if !*(null) {
-                payload.put_u8(0xfb);
-            } else {
-                payload.put_string_lenenc(col_v.as_slice());
-            }
-        }
-
-        payload
-    }
-}
-
-/**
-* EOF packet protocol for MySQL.
-*
-* @see <a href="https://dev.mysql.com/doc/internals/en/packet-EOF_Packet.html">EOF Packet</a>
-*/
-pub struct MySQLEOFPacket {
-    /**
-     * Header of EOF packet.
-     */
-    header: u8, // 0xfe;
-    sequence_id: u32,
-    warnings: u16,
-    status_flags: u16,
-}
-
-impl MySQLEOFPacket {
-    pub fn new(sequence_id: u32) -> Self {
-        MySQLEOFPacket {
-            header: 0xfe,
-            sequence_id,
-            warnings: 0,
-            status_flags: MySQLStatusFlag::ServerStatusAutocommit as u16
-        }
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLEOFPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
-        payload.put_u8(this.get_sequence_id() as u8); // seq
-        payload.put_u8(this.header);
-        payload.put_u16_le(this.warnings);
-        payload.put_u16_le(this.status_flags);
-
-        payload
-    }
-}
-
-impl MySQLPacket for MySQLEOFPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
- * OK packet protocol for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/packet-OK_Packet.html">OK Packet</a>
- */
-pub struct MySQLOKPacket {
-    /**
-     * Header of OK packet.
-     */
-    header: u8,
-    sequence_id: u32,
-    affected_rows: u64,
-    last_insert_id: u64,
-    status_flag: u32,
-    warnings: u32,
-    info: String,
-}
-
-impl MySQLOKPacket {
-    pub fn new(sequence_id: u32, affected_rows: u64, last_insert_id: u64) -> Self {
-        MySQLOKPacket {
-            header: 0x00,
-            sequence_id: sequence_id,
-            affected_rows: affected_rows,
-            last_insert_id: last_insert_id,
-            status_flag: MySQLStatusFlag::ServerStatusAutocommit as u32,
-            warnings: 0,
-            info: "".to_string()
-        }
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLOKPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
-        payload.put_u8(this.get_sequence_id() as u8); // seq
-        payload.put_u8(this.header);
-
-        payload.put_int_lenenc(this.affected_rows as usize);
-        payload.put_int_lenenc(this.last_insert_id as usize);
-
-        payload.put_u16_le(this.status_flag as u16);
-        payload.put_u16_le(this.warnings as u16);
-
-        payload.put_slice(this.info.as_bytes());
-
-        payload
-    }
-}
-
-impl MySQLPacket for MySQLOKPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
- * COM_QUERY command packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/com-query.html">COM_QUERY</a>
- */
-pub struct MySQLComQueryPacket {
-    sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    sql: Vec<u8>
-}
-
-impl MySQLComQueryPacket {
-    pub fn new(command_type: u8) -> Self {
-        MySQLComQueryPacket {
-            sequence_id: 0,
-            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            sql: vec![]
-        }
-    }
-
-    pub fn get_sql(&self) -> Vec<u8> {
-        self.sql.clone()
-    }
-
-    pub fn get_command_type(&self) -> u8 {
-        self.command_type
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComQueryPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
-        let bytes = payload.get_remaining_bytes();
-        this.sql = Vec::from(bytes.as_slice());
-        this
-    }
-}
-
-impl MySQLPacket for MySQLComQueryPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
  * COM_INIT_DB command packet for MySQL.
  *
  * @see <a href="https://dev.mysql.com/doc/internals/en/com-init-db.html#packet-COM_INIT_DB">COM_INIT_DB</a>
@@ -824,305 +739,6 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComFieldList
 }
 
 impl MySQLPacket for MySQLComFieldListPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
- * COM_STMT_PREPARE command packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-prepare.html">COM_STMT_PREPARE</a>
- */
-pub struct MySQLComStmtPreparePacket {
-    sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    sql: Vec<u8>,
-}
-
-impl MySQLComStmtPreparePacket {
-    pub fn new(command_type: u8) -> Self {
-        MySQLComStmtPreparePacket {
-            sequence_id: 0,
-            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            sql: vec![],
-        }
-    }
-
-    pub fn get_sql(&self) -> Vec<u8> {
-        self.sql.clone()
-    }
-
-    pub fn get_command_type(&self) -> u8 {
-        self.command_type
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtPreparePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
-        let bytes = payload.get_remaining_bytes();
-        this.sql = Vec::from(bytes.as_slice());
-        this
-    }
-}
-
-impl MySQLPacket for MySQLComStmtPreparePacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
- * COM_STMT_PREPARE_OK packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-prepare-response.html#packet-COM_STMT_PREPARE_OK">COM_STMT_PREPARE_OK</a>
- */
-pub struct MySQLComStmtPrepareOKPacket {
-    sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    status: u8,
-    statement_id: u32,
-    columns_count: u16,
-    parameters_count: u16,
-    warning_count: u16,
-}
-
-impl MySQLComStmtPrepareOKPacket {
-    pub fn new(sequence_id: u32,
-               command_type: u8, // MySQLCommandPacketType,
-               statement_id: u32,
-               columns_count: u16,
-               parameters_count: u16,
-               warning_count: u16) -> Self {
-        MySQLComStmtPrepareOKPacket {
-            sequence_id,
-            command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            status: 0x00,
-            statement_id,
-            columns_count,
-            parameters_count,
-            warning_count,
-        }
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtPrepareOKPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
-        payload.put_u8(this.get_sequence_id() as u8); // seq
-        payload.put_u8(this.status);
-        payload.put_u32_le(this.statement_id);
-        payload.put_u16_le(this.columns_count);
-        payload.put_u16_le(this.parameters_count);
-        let reserved: [u8; 1] = [0];
-        payload.put_slice(&reserved);
-        payload.put_u16_le(this.warning_count);
-        payload
-    }
-}
-
-impl MySQLPacket for MySQLComStmtPrepareOKPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
- * COM_STMT_EXECUTE command packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-execute.html">COM_STMT_EXECUTE</a>
- */
-pub struct MySQLComStmtExecutePacket {
-    sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    statement_id: u32,
-    flags: u16,
-    null_bit_map: Vec<u8>,
-    new_parameters_bound_flag: u8,
-    iteration_count: u32,
-    sql: Vec<u8>,
-    parameters: Vec<PrepareParamValue>
-}
-
-impl MySQLComStmtExecutePacket {
-    pub fn new(command_type: u8) -> Self {
-        MySQLComStmtExecutePacket {
-            sequence_id: 0,
-            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            statement_id: 0,
-            flags: 0,
-            null_bit_map: vec![],
-            new_parameters_bound_flag: 0,
-            iteration_count: 0,
-            sql: vec![],
-            parameters: vec![]
-        }
-    }
-
-    pub fn get_sql(&self) -> Vec<u8> {
-        self.sql.clone()
-    }
-
-    pub fn get_command_type(&self) -> u8 {
-        self.command_type
-    }
-
-    pub fn get_parameters(&self) -> Vec<PrepareParamValue> {
-        self.parameters.clone()
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecutePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
-        this.sequence_id = header.sequence_id;
-        this.statement_id = payload.get_uint_le(4) as u32;
-        this.sql = get_session_prepare_stmt_context_sql(this.statement_id as u64);
-        this.flags = (payload.get_uint(1) & 0xff) as u16;
-        this.iteration_count = payload.get_uint_le(4) as u32;
-        assert_eq!(1, this.iteration_count);
-        let session_id = header.get_session_id();
-        let parameters_count = get_session_prepare_stmt_context_parameters_count(this.statement_id as u64);
-        ///
-        /// Null bitmap for MySQL.
-        ///
-        /// @see <a href="https://dev.mysql.com/doc/internals/en/null-bitmap.html">NULL-Bitmap</a>
-        ///
-        let mut null_bit_map: Vec<u8> = vec![];
-        let offset = 0;
-        let num_params = parameters_count as usize;
-        if num_params > 0 {
-            let len = (num_params + offset + 7) / 8;
-            null_bit_map = vec![0u8; len]; //Vec::with_capacity(len);
-            for i in 0..len {
-                null_bit_map[i] = (payload.get_uint(1) & 0xff) as u8;
-            }
-            let new_parameters_bound_flag = (payload.get_uint(1) & 0xff) as u8;
-            let mut parameter_types = Vec::with_capacity(num_params);
-            if MySQLNewParametersBoundFlag::ParameterTypeExist as u8 == new_parameters_bound_flag {
-                for _ in 0..num_params {
-                    let column_type = (payload.get_uint(1) & 0xff) as u8;
-                    let unsigned_flag = (payload.get_uint(1) & 0xff) as u8;
-                    parameter_types.push((column_type, unsigned_flag));
-                }
-                set_session_prepare_stmt_context_parameter_types( this.statement_id as u64, parameter_types.clone());
-            } else {
-                parameter_types = get_session_prepare_stmt_context_parameter_types(this.statement_id as u64);
-            }
-            this.parameters = Vec::with_capacity(num_params);
-            for i in 0..num_params {
-                let null_byte_position = (i + offset) / 8;
-                let null_bit_position = (i + offset) % 8;
-                if (null_bit_map[null_byte_position] & (1 << null_bit_position) as u8) != 0 {
-                    this.parameters.push(PrepareParamValue::NULL);
-                } else {
-                    let (column_type, unsigned_flag) = parameter_types.get(i).unwrap();
-                    let column_flags = MySQLColumnFlags::from_bits_truncate(*unsigned_flag as u16);
-                    let param_value = binary::read_bin(payload, MySQLColumnType::from(*column_type), column_flags.contains(MySQLColumnFlags::UNSIGNED_FLAG)).unwrap();
-                    this.parameters.push(param_value);
-                }
-            }
-        }
-        this
-    }
-}
-
-impl MySQLPacket for MySQLComStmtExecutePacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-/**
- * Binary result set row packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/binary-protocol-resultset-row.html">Binary Protocol ResultSet Row</a>
- */
-pub struct MySQLBinaryResultSetRowPacket {
-    sequence_id: u32,
-    data: Vec<PrepareParamValue>,
-}
-
-impl MySQLBinaryResultSetRowPacket {
-    pub fn new(sequence_id: u32, data: Vec<PrepareParamValue>) -> Self {
-        MySQLBinaryResultSetRowPacket {
-            sequence_id: sequence_id,
-            data: data
-        }
-    }
-}
-
-impl MySQLPacket for MySQLBinaryResultSetRowPacket {
-    fn get_sequence_id(&self) -> u32 {
-        self.sequence_id
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLBinaryResultSetRowPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
-        payload.put_u8(this.get_sequence_id() as u8); // seq
-        payload.put_u8(0x00); // PACKET_HEADER
-
-        let null_bitmap_offset = 2;
-        let columns_numbers = this.data.len();
-        let len = (columns_numbers + null_bitmap_offset + 7) / 8;
-        let mut null_bit_map = vec![0u8; len];//Vec::with_capacity(len);
-        for i in 0..len {
-            null_bit_map[i] = 0u8;
-            if let Some(v) = this.data.get(i) {
-                if *v == PrepareParamValue::NULL {
-                    let null_byte_position = (i + null_bitmap_offset) / 8;
-                    let null_bit_position = (i + null_bitmap_offset) % 8;
-                    null_bit_map[null_byte_position] = (1 << null_bit_position) as u8;
-                }
-            }
-        }
-
-        for v in null_bit_map.iter() {
-            payload.put_u8(*v);
-        }
-
-        for v in this.data.iter() {
-            binary::write_bin(v, payload);
-        }
-
-        payload
-    }
-}
-
-/**
- * COM_STMT_CLOSE command packet for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/com-stmt-close.html">COM_STMT_CLOSE</a>
- */
-pub struct MySQLComStmtClosePacket {
-    sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    statement_id: u32,
-}
-
-impl MySQLComStmtClosePacket {
-    pub fn new(command_type: u8) -> Self {
-        MySQLComStmtClosePacket {
-            sequence_id: 0,
-            command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            statement_id: 0,
-        }
-    }
-
-    pub fn get_statement_id(&self) -> u32 {
-        self.statement_id
-    }
-}
-
-impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtClosePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
-        this.sequence_id = header.sequence_id;
-        this.statement_id = payload.get_uint_le(4) as u32;
-
-        this
-    }
-}
-
-impl MySQLPacket for MySQLComStmtClosePacket {
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }
