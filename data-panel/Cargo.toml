@@ -33,7 +33,8 @@ chrono = "0.4.9"
 log = "0.4.8"
 env_logger = "0.7.1"
 
-clap = "2.33"
+clap = { version = "2.33", features = ["yaml"] }
+yaml-rust = "0.4"
 
 lazy_static = "1.4.0"
 dashmap = "3.11.0"
