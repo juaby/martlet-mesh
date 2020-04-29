@@ -1,0 +1,11 @@
+app:
+ name: Database Mesh
+ host: localhost
+ port: 13306
+ version: 0.1.0
+control:
+  pilot: localhost:6306
+  mixer: localhost:7306
+  citadel: localhost:8306
+system:
+  timeout: 5000
