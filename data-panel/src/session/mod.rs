@@ -157,7 +157,7 @@ pub fn set_session_authorized(session_id: u64, authorized: bool) {
 
 pub fn get_session_authorized(session_id: u64) -> bool {
     let session_authorized_manager = session_authorized_manager();
-    let mut session_authorized_manager = session_authorized_manager.read().unwrap();
+    let session_authorized_manager = session_authorized_manager.read().unwrap();
     *session_authorized_manager.get(&session_id).unwrap()
 }
 
@@ -188,7 +188,7 @@ pub fn set_session_prepare_stmt_context_statement_id(sql: String, statement_id: 
 
 pub fn get_session_prepare_stmt_context_statement_id(sql: String) -> Option<u64> {
     let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
-    let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.read().unwrap();
+    let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.read().unwrap();
     if let Some(statement_id) = session_prepare_stmt_context_statement_id_manager.get(sql.as_str()) {
         Some(*statement_id)
     } else {
@@ -217,7 +217,7 @@ pub fn set_session_prepare_stmt_context_parameters_count(statement_id: u64, para
 
 pub fn get_session_prepare_stmt_context_parameters_count(statement_id: u64) -> u16 {
     let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
-    let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.read().unwrap();
+    let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.read().unwrap();
     *session_prepare_stmt_context_parameters_count_manager.get(&statement_id).unwrap()
 }
 
@@ -242,7 +242,7 @@ pub fn set_session_prepare_stmt_context_sql(statement_id: u64, sql: Vec<u8>) {
 
 pub fn get_session_prepare_stmt_context_sql(statement_id: u64) -> Vec<u8> {
     let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
-    let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.read().unwrap();
+    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.read().unwrap();
     let sql = session_prepare_stmt_context_statement_sql_manager.get(&statement_id).unwrap();
     sql.to_vec()
 }

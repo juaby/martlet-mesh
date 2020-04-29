@@ -155,11 +155,11 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecu
         assert_eq!(1, this.iteration_count);
         let session_id = header.get_session_id();
         let parameters_count = get_session_prepare_stmt_context_parameters_count(this.statement_id as u64);
-        ///
-        /// Null bitmap for MySQL.
-        ///
-        /// @see <a href="https://dev.mysql.com/doc/internals/en/null-bitmap.html">NULL-Bitmap</a>
-        ///
+        //
+        // Null bitmap for MySQL.
+        //
+        // @see <a href="https://dev.mysql.com/doc/internals/en/null-bitmap.html">NULL-Bitmap</a>
+        //
         let mut null_bit_map: Vec<u8> = vec![];
         let offset = 0;
         let num_params = parameters_count as usize;

@@ -18,6 +18,7 @@ mod handler;
 mod server;
 mod session;
 mod discovery;
+mod error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

@@ -22,7 +22,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
         // TODO
         let sql = command_packet.get_sql();
         let sql = String::from_utf8_lossy(sql.as_slice());
-        let statements = parser::mysql::parser(sql.as_ref());
+        let statements = parser::mysql::parser(sql.to_string());
 
         let mut payloads: Vec<Bytes> = Vec::new();
 
@@ -151,20 +151,11 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
         let database_url = "mysql://root:root@localhost:8306/test";
         let mut conn = Conn::new(database_url).unwrap();
         let command_sql = stmt_execute_packet.get_sql();
-        let sql = String::from_utf8_lossy(command_sql.as_slice());
-        let sql = sql.to_string();
+        let cow_sql = String::from_utf8_lossy(command_sql.as_slice());
+        let sql = cow_sql.to_string();
         println!("SQL = {}", sql);
-        let statement = if sql.starts_with("SET") {
-            Statement::SetVariable {
-                local: false,
-                variable: "".to_string(),
-                value: Ident("".to_string())
-            }
-        } else {
-            let mut statement = parser::mysql::parser(sql.as_str());
-            let statement = statement.pop().unwrap();
-            statement
-        };
+        let mut statement = parser::mysql::parser(cow_sql.to_string());
+        let statement = statement.pop().unwrap();
 
         match statement {
             Statement::Query(q) => {

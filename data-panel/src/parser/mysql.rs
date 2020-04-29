@@ -1,6 +1,7 @@
 use sqlparser::dialect::{Dialect};
 use sqlparser::parser::Parser;
 use sqlparser::ast::Statement;
+use sqlparser::ast::SetVariableValue::Ident;
 
 #[derive(Debug)]
 pub struct MySqlDialect {}
@@ -24,10 +25,18 @@ impl Dialect for MySqlDialect {
     }
 }
 
-pub fn parser(sql: &str) -> Vec<Statement> {
+pub fn parser(sql: String) -> Vec<Statement> {
     let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
 
-    let ast = Parser::parse_sql(&dialect, sql.to_string()).unwrap();
+    let mut ast = if sql.to_uppercase().starts_with("SET NAMES") {
+        vec![Statement::SetVariable {
+            local: false,
+            variable: "".to_string(),
+            value: Ident("".to_string())
+        }]
+    } else {
+        Parser::parse_sql(&dialect, sql).unwrap()
+    };
 
     ast
 }

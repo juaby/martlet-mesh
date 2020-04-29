@@ -7,6 +7,7 @@ use crate::handler::mysql::text::ComQueryHandler;
 
 pub mod text;
 pub mod binary;
+pub mod rdbc;
 
 pub trait CommandHandler<P> {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<P>) -> Option<Vec<Bytes>>;
