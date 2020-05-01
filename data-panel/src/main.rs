@@ -22,7 +22,7 @@ mod handler;
 mod server;
 mod session;
 mod discovery;
-mod error;
+mod common;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
