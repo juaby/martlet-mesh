@@ -15,13 +15,13 @@ use sqlparser::ast::{BinaryOperator, UnaryOperator};
 use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
-use crate::parser::sqlrewrite::SQLReWrite;
+use crate::parser::sqlanalyse::SQLAnalyse;
 
-pub type SRWResult = crate::common::Result<()>;
+pub type SAResult = crate::common::Result<()>;
 
 /// Unary operators
-impl SQLReWrite for UnaryOperator {
-    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+impl SQLAnalyse for UnaryOperator {
+    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
         f.write_str(match self {
             UnaryOperator::Plus => "+",
             UnaryOperator::Minus => "-",
@@ -32,8 +32,8 @@ impl SQLReWrite for UnaryOperator {
 }
 
 /// Binary operators
-impl SQLReWrite for BinaryOperator {
-    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+impl SQLAnalyse for BinaryOperator {
+    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
         f.write_str(match self {
             BinaryOperator::Plus => "+",
             BinaryOperator::Minus => "-",
