@@ -10,23 +10,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt;
 use sqlparser::ast::{BinaryOperator, UnaryOperator};
 
+use std::fmt;
+use std::fmt::Write;
+use std::collections::HashMap;
+use crate::parser::sqlrewrite::SQLReWrite;
+
+pub type SRWResult = crate::common::Result<()>;
+
 /// Unary operators
-impl fmt::Display for UnaryOperator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for UnaryOperator {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         f.write_str(match self {
             UnaryOperator::Plus => "+",
             UnaryOperator::Minus => "-",
             UnaryOperator::Not => "NOT",
-        })
+        })?;
+        Ok(())
     }
 }
 
 /// Binary operators
-impl fmt::Display for BinaryOperator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for BinaryOperator {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         f.write_str(match self {
             BinaryOperator::Plus => "+",
             BinaryOperator::Minus => "-",
@@ -43,6 +50,7 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::Or => "OR",
             BinaryOperator::Like => "LIKE",
             BinaryOperator::NotLike => "NOT LIKE",
-        })
+        })?;
+        Ok(())
     }
 }

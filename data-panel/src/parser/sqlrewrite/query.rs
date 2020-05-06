@@ -11,28 +11,41 @@
 // limitations under the License.
 
 use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query};
+
 use std::fmt;
-use crate::parser::sqlrewrite::display_comma_separated;
+use std::fmt::Write;
+use std::collections::HashMap;
+
+pub type SRWResult = crate::common::Result<()>;
+
+use crate::parser::sqlrewrite::{display_comma_separated, SQLReWrite};
 
 /// The most complete variant of a `SELECT` query expression, optionally
 /// including `WITH`, `UNION` / other set operations, and `ORDER BY`.
-impl fmt::Display for Query {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for Query {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         if !self.ctes.is_empty() {
-            write!(f, "WITH {} ", display_comma_separated(&self.ctes))?;
+            write!(f, "WITH ")?;
+            display_comma_separated(&self.ctes).rewrite(f, ctx)?;
+            write!(f, " ")?;
         }
-        write!(f, "{}", self.body)?;
+        self.body.rewrite(f, ctx)?;
         if !self.order_by.is_empty() {
-            write!(f, " ORDER BY {}", display_comma_separated(&self.order_by))?;
+            write!(f, " ORDER BY ")?;
+            display_comma_separated(&self.order_by).rewrite(f, ctx)?;
         }
         if let Some(ref limit) = self.limit {
-            write!(f, " LIMIT {}", limit)?;
+            write!(f, " LIMIT ")?;
+            limit.rewrite(f, ctx)?;
         }
         if let Some(ref offset) = self.offset {
-            write!(f, " OFFSET {} ROWS", offset)?;
+            write!(f, " OFFSET ")?;
+            offset.rewrite(f, ctx)?;
+            write!(f, " ROWS")?;
         }
         if let Some(ref fetch) = self.fetch {
-            write!(f, " {}", fetch)?;
+            write!(f, " ")?;
+            fetch.rewrite(f, ctx)?;
         }
         Ok(())
     }
@@ -40,12 +53,18 @@ impl fmt::Display for Query {
 
 /// A node in a tree, representing a "query body" expression, roughly:
 /// `SELECT ... [ {UNION|EXCEPT|INTERSECT} SELECT ...]`
-impl fmt::Display for SetExpr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for SetExpr {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
-            SetExpr::Select(s) => write!(f, "{}", s),
-            SetExpr::Query(q) => write!(f, "({})", q),
-            SetExpr::Values(v) => write!(f, "{}", v),
+            SetExpr::Select(s) => {
+                s.rewrite(f, ctx)?;
+            },
+            SetExpr::Query(q) => {
+                q.rewrite(f, ctx)?;
+            },
+            SetExpr::Values(v) => {
+                v.rewrite(f, ctx)?;
+            },
             SetExpr::SetOperation {
                 left,
                 right,
@@ -53,44 +72,59 @@ impl fmt::Display for SetExpr {
                 all,
             } => {
                 let all_str = if *all { " ALL" } else { "" };
-                write!(f, "{} {}{} {}", left, op, all_str, right)
+                left.rewrite(f, ctx)?;
+                write!(f, " ")?;
+                op.rewrite(f, ctx)?;
+                write!(f, "{}", all_str)?;
+                write!(f, " ")?;
+                right.rewrite(f, ctx)?;
             }
-        }
+        };
+        Ok(())
     }
 }
 
-impl fmt::Display for SetOperator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for SetOperator {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         f.write_str(match self {
             SetOperator::Union => "UNION",
             SetOperator::Except => "EXCEPT",
             SetOperator::Intersect => "INTERSECT",
-        })
+        })?;
+        Ok(())
     }
 }
 
 /// A restricted variant of `SELECT` (without CTEs/`ORDER BY`), which may
 /// appear either as the only body item of an `SQLQuery`, or as an operand
 /// to a set operation like `UNION`.
-impl fmt::Display for Select {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for Select {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         write!(
             f,
-            "SELECT{} {}",
-            if self.distinct { " DISTINCT" } else { "" },
-            display_comma_separated(&self.projection)
+            "SELECT"
         )?;
+        write!(
+            f,
+            "{} ",
+            if self.distinct { " DISTINCT" } else { "" }
+        )?;
+        display_comma_separated(&self.projection).rewrite(f, ctx)?;
         if !self.from.is_empty() {
-            write!(f, " FROM {}", display_comma_separated(&self.from))?;
+            write!(f, " FROM ")?;
+            display_comma_separated(&self.from).rewrite(f, ctx)?;
         }
         if let Some(ref selection) = self.selection {
-            write!(f, " WHERE {}", selection)?;
+            write!(f, " WHERE ")?;
+            selection.rewrite(f, ctx)?;
         }
         if !self.group_by.is_empty() {
-            write!(f, " GROUP BY {}", display_comma_separated(&self.group_by))?;
+            write!(f, " GROUP BY ")?;
+            display_comma_separated(&self.group_by).rewrite(f, ctx)?;
         }
         if let Some(ref having) = self.having {
-            write!(f, " HAVING {}", having)?;
+            write!(f, " HAVING ")?;
+            having.rewrite(f, ctx)?;
         }
         Ok(())
     }
@@ -100,37 +134,52 @@ impl fmt::Display for Select {
 /// The names in the column list before `AS`, when specified, replace the names
 /// of the columns returned by the query. The parser does not validate that the
 /// number of columns in the query matches the number of columns in the query.
-impl fmt::Display for Cte {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} AS ({})", self.alias, self.query)
+impl SQLReWrite for Cte {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        self.alias.rewrite(f, ctx)?;
+        write!(f, " AS (")?;
+        self.query.rewrite(f, ctx)?;
+        write!(f, ")")?;
+        Ok(())
     }
 }
 
 /// One item of the comma-separated list following `SELECT`
-impl fmt::Display for SelectItem {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for SelectItem {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match &self {
-            SelectItem::UnnamedExpr(expr) => write!(f, "{}", expr),
-            SelectItem::ExprWithAlias { expr, alias } => write!(f, "{} AS {}", expr, alias),
-            SelectItem::QualifiedWildcard(prefix) => write!(f, "{}.*", prefix),
-            SelectItem::Wildcard => write!(f, "*"),
+            SelectItem::UnnamedExpr(expr) => {
+                expr.rewrite(f, ctx)?;
+            },
+            SelectItem::ExprWithAlias { expr, alias } => {
+                expr.rewrite(f, ctx)?;
+                write!(f, " AS {}", alias)?;
+            },
+            SelectItem::QualifiedWildcard(prefix) => {
+                prefix.rewrite(f, ctx)?;
+                write!(f, ".*")?;
+            },
+            SelectItem::Wildcard => {
+                write!(f, "*")?;
+            },
         }
+        Ok(())
     }
 }
 
-impl fmt::Display for TableWithJoins {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.relation)?;
+impl SQLReWrite for TableWithJoins {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        self.relation.rewrite(f, ctx)?;
         for join in &self.joins {
-            write!(f, "{}", join)?;
+            join.rewrite(f, ctx)?;
         }
         Ok(())
     }
 }
 
 /// A table name or a parenthesized subquery with an optional alias
-impl fmt::Display for TableFactor {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for TableFactor {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             TableFactor::Table {
                 name,
@@ -138,15 +187,20 @@ impl fmt::Display for TableFactor {
                 args,
                 with_hints,
             } => {
-                write!(f, "{}", name)?;
+                name.rewrite(f, ctx)?;
                 if !args.is_empty() {
-                    write!(f, "({})", display_comma_separated(args))?;
+                    write!(f, "(")?;
+                    display_comma_separated(args).rewrite(f, ctx)?;
+                    write!(f, ")")?;
                 }
                 if let Some(alias) = alias {
-                    write!(f, " AS {}", alias)?;
+                    write!(f, " AS ")?;
+                    alias.rewrite(f, ctx)?;
                 }
                 if !with_hints.is_empty() {
-                    write!(f, " WITH ({})", display_comma_separated(with_hints))?;
+                    write!(f, " WITH (")?;
+                    display_comma_separated(with_hints).rewrite(f, ctx)?;
+                    write!(f, ")")?;
                 }
                 Ok(())
             }
@@ -158,43 +212,60 @@ impl fmt::Display for TableFactor {
                 if *lateral {
                     write!(f, "LATERAL ")?;
                 }
-                write!(f, "({})", subquery)?;
+                write!(f, "(")?;
+                subquery.rewrite(f, ctx)?;
+                write!(f, ")")?;
                 if let Some(alias) = alias {
-                    write!(f, " AS {}", alias)?;
+                    write!(f, " AS ")?;
+                    alias.rewrite(f, ctx)?;
                 }
                 Ok(())
             }
-            TableFactor::NestedJoin(table_reference) => write!(f, "({})", table_reference),
+            TableFactor::NestedJoin(table_reference) => {
+                write!(f, "(")?;
+                table_reference.rewrite(f, ctx)?;
+                write!(f, ")")?;
+                Ok(())
+            },
         }
     }
 }
 
-impl fmt::Display for TableAlias {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for TableAlias {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         write!(f, "{}", self.name)?;
         if !self.columns.is_empty() {
-            write!(f, " ({})", display_comma_separated(&self.columns))?;
+            write!(f, " (")?;
+            display_comma_separated(&self.columns).rewrite(f, ctx);
+            write!(f, ")")?;
         }
         Ok(())
     }
 }
 
-impl fmt::Display for Join {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for Join {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         fn prefix(constraint: &JoinConstraint) -> &'static str {
             match constraint {
                 JoinConstraint::Natural => "NATURAL ",
                 _ => "",
             }
         }
-        fn suffix<'a>(constraint: &'a JoinConstraint) -> impl fmt::Display + 'a {
+        fn suffix<'a>(constraint: &'a JoinConstraint) -> impl SQLReWrite + 'a {
             struct Suffix<'a>(&'a JoinConstraint);
-            impl<'a> fmt::Display for Suffix<'a> {
-                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            impl<'a> SQLReWrite for Suffix<'a> {
+                fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
                     match self.0 {
-                        JoinConstraint::On(expr) => write!(f, " ON {}", expr),
+                        JoinConstraint::On(expr) => {
+                            write!(f, " ON ")?;
+                            expr.rewrite(f, ctx)?;
+                            Ok(())
+                        },
                         JoinConstraint::Using(attrs) => {
-                            write!(f, " USING({})", display_comma_separated(attrs))
+                            write!(f, " USING(")?;
+                            display_comma_separated(attrs).rewrite(f, ctx)?;
+                            write!(f, ")")?;
+                            Ok(())
                         }
                         _ => Ok(()),
                     }
@@ -203,71 +274,103 @@ impl fmt::Display for Join {
             Suffix(constraint)
         }
         match &self.join_operator {
-            JoinOperator::Inner(constraint) => write!(
-                f,
-                " {}JOIN {}{}",
-                prefix(constraint),
-                self.relation,
-                suffix(constraint)
-            ),
-            JoinOperator::LeftOuter(constraint) => write!(
-                f,
-                " {}LEFT JOIN {}{}",
-                prefix(constraint),
-                self.relation,
-                suffix(constraint)
-            ),
-            JoinOperator::RightOuter(constraint) => write!(
-                f,
-                " {}RIGHT JOIN {}{}",
-                prefix(constraint),
-                self.relation,
-                suffix(constraint)
-            ),
-            JoinOperator::FullOuter(constraint) => write!(
-                f,
-                " {}FULL JOIN {}{}",
-                prefix(constraint),
-                self.relation,
-                suffix(constraint)
-            ),
-            JoinOperator::CrossJoin => write!(f, " CROSS JOIN {}", self.relation),
-            JoinOperator::CrossApply => write!(f, " CROSS APPLY {}", self.relation),
-            JoinOperator::OuterApply => write!(f, " OUTER APPLY {}", self.relation),
+            JoinOperator::Inner(constraint) => {
+                write!(
+                    f,
+                    " {}JOIN ",
+                    prefix(constraint)
+                )?;
+                self.relation.rewrite(f, ctx)?;
+                suffix(constraint).rewrite(f, ctx)?;
+            },
+            JoinOperator::LeftOuter(constraint) => {
+                write!(
+                    f,
+                    " {}LEFT JOIN ",
+                    prefix(constraint)
+                )?;
+                self.relation.rewrite(f, ctx)?;
+                suffix(constraint).rewrite(f, ctx)?;
+            },
+            JoinOperator::RightOuter(constraint) => {
+                write!(
+                    f,
+                    " {}RIGHT JOIN ",
+                    prefix(constraint)
+                )?;
+                self.relation.rewrite(f, ctx)?;
+                suffix(constraint).rewrite(f, ctx)?;
+            },
+            JoinOperator::FullOuter(constraint) => {
+                write!(
+                    f,
+                    " {}FULL JOIN ",
+                    prefix(constraint)
+                )?;
+                self.relation.rewrite(f, ctx)?;
+                suffix(constraint).rewrite(f, ctx)?;
+            },
+            JoinOperator::CrossJoin => {
+                write!(f, " CROSS JOIN ")?;
+                self.relation.rewrite(f, ctx)?;
+            },
+            JoinOperator::CrossApply => {
+                write!(f, " CROSS APPLY ")?;
+                self.relation.rewrite(f, ctx)?;
+            },
+            JoinOperator::OuterApply => {
+                write!(f, " OUTER APPLY ")?;
+                self.relation.rewrite(f, ctx)?;
+            },
         }
+        Ok(())
     }
 }
 
-impl fmt::Display for OrderByExpr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for OrderByExpr {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self.asc {
-            Some(true) => write!(f, "{} ASC", self.expr),
-            Some(false) => write!(f, "{} DESC", self.expr),
-            None => write!(f, "{}", self.expr),
+            Some(true) => {
+                self.expr.rewrite(f, ctx)?;
+                write!(f, " ASC")?;
+            },
+            Some(false) => {
+                self.expr.rewrite(f, ctx)?;
+                write!(f, " DESC")?;
+            },
+            None => {
+                self.expr.rewrite(f, ctx)?;
+            },
         }
+        Ok(())
     }
 }
 
-impl fmt::Display for Fetch {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for Fetch {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         let extension = if self.with_ties { "WITH TIES" } else { "ONLY" };
         if let Some(ref quantity) = self.quantity {
             let percent = if self.percent { " PERCENT" } else { "" };
-            write!(f, "FETCH FIRST {}{} ROWS {}", quantity, percent, extension)
+            write!(f, "FETCH FIRST ")?;
+            quantity.rewrite(f, ctx)?;
+            write!(f, "{} ROWS {}",  percent, extension)?;
         } else {
-            write!(f, "FETCH FIRST ROWS {}", extension)
+            write!(f, "FETCH FIRST ROWS {}", extension)?;
         }
+        Ok(())
     }
 }
 
-impl fmt::Display for Values {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for Values {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         write!(f, "VALUES ")?;
         let mut delim = "";
         for row in &self.0 {
             write!(f, "{}", delim)?;
             delim = ", ";
-            write!(f, "({})", display_comma_separated(row))?;
+            write!(f, "(")?;
+            display_comma_separated(row).rewrite(f, ctx)?;
+            write!(f, ")")?;
         }
         Ok(())
     }

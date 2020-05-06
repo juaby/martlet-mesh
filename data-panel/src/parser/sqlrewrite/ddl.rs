@@ -13,61 +13,98 @@
 //! AST types specific to CREATE/ALTER variants of [Statement]
 //! (commonly referred to as Data Definition Language, or DDL)
 use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident};
-use crate::parser::sqlrewrite::display_comma_separated;
+use crate::parser::sqlrewrite::{display_comma_separated, SQLReWrite};
+
 use std::fmt;
+use std::fmt::Write;
+use std::collections::HashMap;
+
+pub type SRWResult = crate::common::Result<()>;
 
 /// An `ALTER TABLE` (`Statement::AlterTable`) operation
-impl fmt::Display for AlterTableOperation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for AlterTableOperation {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
-            AlterTableOperation::AddConstraint(c) => write!(f, "ADD {}", c),
-            AlterTableOperation::DropConstraint { name } => write!(f, "DROP CONSTRAINT {}", name),
-        }
+            AlterTableOperation::AddConstraint(c) => {
+                write!(f, "ADD ")?;
+                c.rewrite(f, ctx)?;
+            },
+            AlterTableOperation::DropConstraint { name } => {
+                write!(f, "DROP CONSTRAINT {}", name)?;
+            },
+        };
+        Ok(())
     }
 }
 
 /// A table-level constraint, specified in a `CREATE TABLE` or an
 /// `ALTER TABLE ADD <constraint>` statement.
-impl fmt::Display for TableConstraint {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for TableConstraint {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             TableConstraint::Unique {
                 name,
                 columns,
                 is_primary,
-            } => write!(
-                f,
-                "{}{} ({})",
-                display_constraint_name(name),
-                if *is_primary { "PRIMARY KEY" } else { "UNIQUE" },
-                display_comma_separated(columns)
-            ),
+            } => {
+                display_constraint_name(name).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    "{} (",
+                    if *is_primary { "PRIMARY KEY" } else { "UNIQUE" }
+                )?;
+                display_comma_separated(columns).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
+                )?;
+            },
             TableConstraint::ForeignKey {
                 name,
                 columns,
                 foreign_table,
                 referred_columns,
-            } => write!(
-                f,
-                "{}FOREIGN KEY ({}) REFERENCES {}({})",
-                display_constraint_name(name),
-                display_comma_separated(columns),
-                foreign_table,
-                display_comma_separated(referred_columns)
-            ),
+            } => {
+                display_constraint_name(name).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    "FOREIGN KEY ("
+                )?;
+                display_comma_separated(columns).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ") REFERENCES "
+                )?;
+                foreign_table.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    "("
+                )?;
+                display_comma_separated(referred_columns).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
+                )?;
+            },
             TableConstraint::Check { name, expr } => {
-                write!(f, "{}CHECK ({})", display_constraint_name(name), expr)
+                display_constraint_name(name).rewrite(f, ctx)?;
+                write!(f, "CHECK (")?;
+                expr.rewrite(f, ctx)?;
+                write!(f, ")")?;
             }
-        }
+        };
+        Ok(())
     }
 }
 
 /// SQL column definition
-impl fmt::Display for ColumnDef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}", self.name, self.data_type)?;
+impl SQLReWrite for ColumnDef {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        write!(f, "{} ", self.name)?;
+        self.data_type.rewrite(f, ctx)?;
         for option in &self.options {
-            write!(f, " {}", option)?;
+            write!(f, " ")?;
+            option.rewrite(f, ctx)?;
         }
         Ok(())
     }
@@ -89,42 +126,66 @@ impl fmt::Display for ColumnDef {
 /// For maximum flexibility, we don't distinguish between constraint and
 /// non-constraint options, lumping them all together under the umbrella of
 /// "column options," and we allow any column option to be named.
-impl fmt::Display for ColumnOptionDef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}", display_constraint_name(&self.name), self.option)
+impl SQLReWrite for ColumnOptionDef {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        display_constraint_name(&self.name).rewrite(f, ctx)?;
+        self.option.rewrite(f, ctx)?;
+        Ok(())
     }
 }
 
 /// `ColumnOption`s are modifiers that follow a column definition in a `CREATE
 /// TABLE` statement.
-impl fmt::Display for ColumnOption {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl SQLReWrite for ColumnOption {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         use ColumnOption::*;
         match self {
-            Null => write!(f, "NULL"),
-            NotNull => write!(f, "NOT NULL"),
-            Default(expr) => write!(f, "DEFAULT {}", expr),
+            Null => {
+                write!(f, "NULL")?;
+            },
+            NotNull => {
+                write!(f, "NOT NULL")?;
+            },
+            Default(expr) => {
+                write!(f, "DEFAULT ")?;
+                expr.rewrite(f, ctx)?;
+            },
             Unique { is_primary } => {
-                write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })
+                write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
             }
             ForeignKey {
                 foreign_table,
                 referred_columns,
-            } => write!(
-                f,
-                "REFERENCES {} ({})",
-                foreign_table,
-                display_comma_separated(referred_columns)
-            ),
-            Check(expr) => write!(f, "CHECK ({})", expr),
-        }
+            } => {
+                write!(
+                    f,
+                    "REFERENCES "
+                )?;
+                foreign_table.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    " ("
+                )?;
+                display_comma_separated(referred_columns).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
+                )?;
+            },
+            Check(expr) => {
+                write!(f, "CHECK (")?;
+                expr.rewrite(f, ctx)?;
+                write!(f, ")")?;
+            },
+        };
+        Ok(())
     }
 }
 
-fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl fmt::Display + 'a {
+fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl SQLReWrite + 'a {
     struct ConstraintName<'a>(&'a Option<Ident>);
-    impl<'a> fmt::Display for ConstraintName<'a> {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    impl<'a> SQLReWrite for ConstraintName<'a> {
+        fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
             if let Some(name) = self.0 {
                 write!(f, "CONSTRAINT {} ", name)?;
             }
