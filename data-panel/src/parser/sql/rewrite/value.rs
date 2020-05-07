@@ -14,23 +14,22 @@
 use bigdecimal::BigDecimal;
 use sqlparser::ast::{Value, DateTimeField};
 
-use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
-use crate::parser::sqlanalyse::SQLAnalyse;
+use crate::parser::sql::rewrite::SQLReWrite;
 
-pub type SAResult = crate::common::Result<()>;
+pub type SRWResult = crate::common::Result<()>;
 
 /// Primitive SQL values such as number and string
-impl SQLAnalyse for Value {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for Value {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             Value::Number(v) => {
                 write!(f, "{}", v)?;
             },
             Value::SingleQuotedString(v) => {
                 write!(f, "'")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
+                escape_single_quote_string(v).rewrite(f, ctx)?;
                 write!(f, "'")?;
             },
             Value::NationalStringLiteral(v) => {
@@ -44,17 +43,17 @@ impl SQLAnalyse for Value {
             },
             Value::Date(v) => {
                 write!(f, "DATE '")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
+                escape_single_quote_string(v).rewrite(f, ctx)?;
                 write!(f, "'")?;
             },
             Value::Time(v) => {
                 write!(f, "TIME '")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
+                escape_single_quote_string(v).rewrite(f, ctx)?;
                 write!(f, "'")?;
             },
             Value::Timestamp(v) => {
                 write!(f, "TIMESTAMP '")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
+                escape_single_quote_string(v).rewrite(f, ctx)?;
                 write!(f, "'")?;
             },
             Value::Interval {
@@ -71,7 +70,7 @@ impl SQLAnalyse for Value {
                     f,
                     "INTERVAL '"
                 )?;
-                escape_single_quote_string(value).analyse(f, ctx)?;
+                escape_single_quote_string(value).rewrite(f, ctx)?;
                 write!(
                     f,
                     "' SECOND ({}, {})",
@@ -90,18 +89,18 @@ impl SQLAnalyse for Value {
                     f,
                     "INTERVAL '"
                 )?;
-                escape_single_quote_string(value).analyse(f, ctx)?;
+                escape_single_quote_string(value).rewrite(f, ctx)?;
                 write!(
                     f,
                     "' "
                 )?;
-                leading_field.analyse(f, ctx)?;
+                leading_field.rewrite(f, ctx)?;
                 if let Some(leading_precision) = leading_precision {
                     write!(f, " ({})", leading_precision)?;
                 }
                 if let Some(last_field) = last_field {
                     write!(f, " TO ")?;
-                    last_field.analyse(f, ctx)?;
+                    last_field.rewrite(f, ctx)?;
                 }
                 if let Some(fractional_seconds_precision) = fractional_seconds_precision {
                     write!(f, " ({})", fractional_seconds_precision)?;
@@ -115,8 +114,8 @@ impl SQLAnalyse for Value {
     }
 }
 
-impl SQLAnalyse for DateTimeField {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for DateTimeField {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         f.write_str(match self {
             DateTimeField::Year => "YEAR",
             DateTimeField::Month => "MONTH",
@@ -131,8 +130,8 @@ impl SQLAnalyse for DateTimeField {
 
 pub struct EscapeSingleQuoteString<'a>(&'a str);
 
-impl<'a> SQLAnalyse for EscapeSingleQuoteString<'a> {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl<'a> SQLReWrite for EscapeSingleQuoteString<'a> {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         for c in self.0.chars() {
             if c == '\'' {
                 write!(f, "\'\'")?;

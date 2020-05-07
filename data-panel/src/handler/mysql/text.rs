@@ -1,14 +1,11 @@
 use crate::handler::mysql::CommandHandler;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader, MySQLFieldCountPacket, MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLOKPacket};
-use crate::protocol::database::{DatabasePacket, PacketPayload};
-use sqlparser::ast::Statement;
-use sqlparser::ast::SetVariableValue::Ident;
+use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader};
+use crate::protocol::database::{DatabasePacket};
 use crate::parser;
-use mysql::{Value};
 use bytes::Bytes;
 
-use crate::protocol::database::mysql::packet::text::{MySQLTextResultSetRowPacket, MySQLComQueryPacket};
-use crate::handler::mysql::rdbc::{ExplainPlanContext, ExplainPlan, TBProtocol, Executor};
+use crate::protocol::database::mysql::packet::text::{MySQLComQueryPacket};
+use crate::handler::mysql::explainplan::{ExplainPlanContext, ExplainPlan, TBProtocol, Executor};
 
 pub struct ComQueryHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComQueryHandler {
@@ -31,7 +28,7 @@ impl CommandHandler<MySQLPacketPayload> for ComQueryHandler {
         let cow_sql = String::from_utf8_lossy(command_sql.as_slice());
         let sql = cow_sql.to_string();
         println!("SQL = {}", sql);
-        let mut statement = parser::mysql::parser(sql);
+        let mut statement = parser::sql::mysql::parser(sql);
         let statement = statement.pop().unwrap();
 
         let x_query_context = ExplainPlanContext::new(cow_sql.as_ref(),

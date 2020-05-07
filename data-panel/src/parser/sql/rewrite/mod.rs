@@ -19,7 +19,6 @@ mod query;
 mod value;
 
 use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
-use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
 
@@ -224,7 +223,7 @@ impl SQLReWrite for Expr {
 
                 if let Some(else_result) = else_result {
                     write!(f, " ELSE ")?;
-                    else_result.rewrite(f, ctx);
+                    else_result.rewrite(f, ctx)?;
                 }
                 f.write_str(" END")?;
             }
@@ -700,8 +699,8 @@ impl SQLReWrite for SetVariableValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::mysql::parser;
-    use crate::parser::sqlrewrite::SQLReWrite;
+    use crate::parser::sql::mysql::parser;
+    use crate::parser::sql::rewrite::SQLReWrite;
     use std::collections::HashMap;
 
     #[test]
@@ -711,7 +710,7 @@ mod tests {
            WHERE a > b AND b < 100 \
            ORDER BY a DESC, b";
         //let sql = "insert into test (a, b, c) values (1, 1, ?)";
-        let mut ast = parser(sql);
+        let mut ast = parser(sql.to_string());
         let stmt = ast.pop().unwrap();
         let mut resql = String::new();
         let mut ctx: HashMap<String, String> = HashMap::new();

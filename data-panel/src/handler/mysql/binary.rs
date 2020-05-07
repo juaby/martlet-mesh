@@ -8,7 +8,6 @@ use crate::protocol::database::mysql::packet::binary::{PrepareParamValue, MySQLC
 use crate::parser;
 use bytes::Bytes;
 use crate::protocol::database::mysql::constant::{CHARSET, MySQLColumnType};
-use sqlparser::ast::SetVariableValue::Ident;
 use mysql::prelude::Queryable;
 
 pub struct ComStmtPrepareHandler {}
@@ -22,7 +21,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
         // TODO
         let sql = command_packet.get_sql();
         let sql = String::from_utf8_lossy(sql.as_slice());
-        let statements = parser::mysql::parser(sql.to_string());
+        let statements = parser::sql::mysql::parser(sql.to_string());
 
         let mut payloads: Vec<Bytes> = Vec::new();
 
@@ -154,7 +153,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
         let cow_sql = String::from_utf8_lossy(command_sql.as_slice());
         let sql = cow_sql.to_string();
         println!("SQL = {}", sql);
-        let mut statement = parser::mysql::parser(cow_sql.to_string());
+        let mut statement = parser::sql::mysql::parser(cow_sql.to_string());
         let statement = statement.pop().unwrap();
 
         match statement {

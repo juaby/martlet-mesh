@@ -12,10 +12,9 @@
 
 use sqlparser::ast::{BinaryOperator, UnaryOperator};
 
-use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
-use crate::parser::sqlrewrite::SQLReWrite;
+use crate::parser::sql::rewrite::SQLReWrite;
 
 pub type SRWResult = crate::common::Result<()>;
 

@@ -7,6 +7,7 @@ use crate::handler::mysql::text::ComQueryHandler;
 
 pub mod text;
 pub mod binary;
+pub mod explainplan;
 pub mod rdbc;
 
 pub trait CommandHandler<P> {
@@ -61,7 +62,7 @@ impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
 pub struct AuthHandler {}
 impl CommandHandler<MySQLPacketPayload> for AuthHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
-        let mut command_packet_header = command_packet_header.unwrap();
+        let command_packet_header = command_packet_header.unwrap();
         let mut handshake_response41_payload = payload.unwrap();
         let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
         let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &command_packet_header, &mut handshake_response41_payload);

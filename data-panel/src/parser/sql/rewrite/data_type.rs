@@ -12,16 +12,15 @@
 
 use sqlparser::ast::DataType;
 
-use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
-use crate::parser::sqlanalyse::SQLAnalyse;
+use crate::parser::sql::rewrite::SQLReWrite;
 
-pub type SAResult = crate::common::Result<()>;
+pub type SRWResult = crate::common::Result<()>;
 
 /// SQL data types
-impl SQLAnalyse for DataType {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for DataType {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             DataType::Char(size) => {
                 format_type_with_optional_length(f, "char", size)?;
@@ -94,11 +93,11 @@ impl SQLAnalyse for DataType {
                 write!(f, "bytea")?;
             },
             DataType::Array(ty) => {
-                ty.analyse(f, ctx)?;
+                ty.rewrite(f, ctx)?;
                 write!(f, "[]")?;
             },
             DataType::Custom(ty) => {
-                ty.analyse(f, ctx)?;
+                ty.rewrite(f, ctx)?;
             },
         };
         Ok(())
@@ -109,7 +108,7 @@ fn format_type_with_optional_length(
     f: &mut String,
     sql_type: &'static str,
     len: &Option<u64>,
-) -> SAResult {
+) -> SRWResult {
     write!(f, "{}", sql_type)?;
     if let Some(len) = len {
         write!(f, "({})", len)?;

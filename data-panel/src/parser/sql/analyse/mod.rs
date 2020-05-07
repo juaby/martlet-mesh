@@ -19,7 +19,6 @@ mod query;
 mod value;
 
 use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
-use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
 
@@ -114,13 +113,13 @@ impl SQLAnalyse for Expr {
                 list,
                 negated,
             } => {
-                expr.analyse(f, ctx)?;
+                expr.analyse(f, ctx)?; // TODO
                 write!(
                     f,
                     " {}IN (",
                     if *negated { "NOT " } else { "" }
                 )?;
-                display_comma_separated(list).analyse(f, ctx)?;
+                display_comma_separated(list).analyse(f, ctx)?; // TODO
                 write!(
                     f,
                     ")"
@@ -149,25 +148,25 @@ impl SQLAnalyse for Expr {
                 low,
                 high,
             } => {
-                expr.analyse(f, ctx)?;
+                expr.analyse(f, ctx)?; // TODO
                 write!(
                     f,
                     " {}BETWEEN ",
                     if *negated { "NOT " } else { "" }
                 )?;
-                low.analyse(f, ctx)?;
+                low.analyse(f, ctx)?; // TODO
                 write!(
                     f,
                     " AND "
                 )?;
-                high.analyse(f, ctx)?;
+                high.analyse(f, ctx)?; // TODO
             },
             Expr::BinaryOp { left, op, right } => {
-                left.analyse(f, ctx)?;
+                left.analyse(f, ctx)?; // TODO
                 write!(f, " ")?;
-                op.analyse(f, ctx)?;
+                op.analyse(f, ctx)?; // TODO
                 write!(f, " ")?;
-                right.analyse(f, ctx)?;
+                right.analyse(f, ctx)?; // TODO
             },
             Expr::UnaryOp { op, expr } => {
                 op.analyse(f, ctx)?;
@@ -224,7 +223,7 @@ impl SQLAnalyse for Expr {
 
                 if let Some(else_result) = else_result {
                     write!(f, " ELSE ")?;
-                    else_result.analyse(f, ctx);
+                    else_result.analyse(f, ctx)?;
                 }
                 f.write_str(" END")?;
             }
@@ -332,11 +331,11 @@ impl SQLAnalyse for Statement {
                 source,
             } => {
                 write!(f, "INSERT INTO ")?;
-                table_name.analyse(f, ctx)?;
+                table_name.analyse(f, ctx)?; // TODO
                 write!(f, " ")?;
                 if !columns.is_empty() {
                     write!(f, "(")?;
-                    display_comma_separated(columns).analyse(f, ctx)?;
+                    display_comma_separated(columns).analyse(f, ctx)?; // TODO
                     write!(f, ") ")?;
                 }
                 source.analyse(f, ctx)?;
@@ -375,14 +374,14 @@ impl SQLAnalyse for Statement {
                 selection,
             } => {
                 write!(f, "UPDATE ")?;
-                table_name.analyse(f, ctx)?;
+                table_name.analyse(f, ctx)?; // TODO
                 if !assignments.is_empty() {
                     write!(f, " SET ")?;
                     display_comma_separated(assignments).analyse(f, ctx)?;
                 }
                 if let Some(selection) = selection {
                     write!(f, " WHERE ")?;
-                    selection.analyse(f, ctx)?;
+                    selection.analyse(f, ctx)?; // TODO
                 }
             }
             Statement::Delete {
@@ -390,10 +389,10 @@ impl SQLAnalyse for Statement {
                 selection,
             } => {
                 write!(f, "DELETE FROM ")?;
-                table_name.analyse(f, ctx)?;
+                table_name.analyse(f, ctx)?; // TODO
                 if let Some(selection) = selection {
                     write!(f, " WHERE ")?;
-                    selection.analyse(f, ctx)?;
+                    selection.analyse(f, ctx)?; // TODO
                 }
             }
             Statement::CreateView {
@@ -700,8 +699,8 @@ impl SQLAnalyse for SetVariableValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::mysql::parser;
-    use crate::parser::sqlrewrite::SQLReWrite;
+    use crate::parser::sql::mysql::parser;
+    use crate::parser::sql::rewrite::SQLReWrite;
     use std::collections::HashMap;
 
     #[test]
@@ -711,7 +710,7 @@ mod tests {
            WHERE a > b AND b < 100 \
            ORDER BY a DESC, b";
         //let sql = "insert into test (a, b, c) values (1, 1, ?)";
-        let mut ast = parser(sql);
+        let mut ast = parser(sql.to_string());
         let stmt = ast.pop().unwrap();
         let mut resql = String::new();
         let mut ctx: HashMap<String, String> = HashMap::new();

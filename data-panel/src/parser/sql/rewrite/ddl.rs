@@ -13,21 +13,20 @@
 //! AST types specific to CREATE/ALTER variants of [Statement]
 //! (commonly referred to as Data Definition Language, or DDL)
 use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident};
-use crate::parser::sqlanalyse::{display_comma_separated, SQLAnalyse};
+use crate::parser::sql::rewrite::{display_comma_separated, SQLReWrite};
 
-use std::fmt;
 use std::fmt::Write;
 use std::collections::HashMap;
 
-pub type SAResult = crate::common::Result<()>;
+pub type SRWResult = crate::common::Result<()>;
 
 /// An `ALTER TABLE` (`Statement::AlterTable`) operation
-impl SQLAnalyse for AlterTableOperation {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for AlterTableOperation {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             AlterTableOperation::AddConstraint(c) => {
                 write!(f, "ADD ")?;
-                c.analyse(f, ctx)?;
+                c.rewrite(f, ctx)?;
             },
             AlterTableOperation::DropConstraint { name } => {
                 write!(f, "DROP CONSTRAINT {}", name)?;
@@ -39,21 +38,21 @@ impl SQLAnalyse for AlterTableOperation {
 
 /// A table-level constraint, specified in a `CREATE TABLE` or an
 /// `ALTER TABLE ADD <constraint>` statement.
-impl SQLAnalyse for TableConstraint {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for TableConstraint {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             TableConstraint::Unique {
                 name,
                 columns,
                 is_primary,
             } => {
-                display_constraint_name(name).analyse(f, ctx)?;
+                display_constraint_name(name).rewrite(f, ctx)?;
                 write!(
                     f,
                     "{} (",
                     if *is_primary { "PRIMARY KEY" } else { "UNIQUE" }
                 )?;
-                display_comma_separated(columns).analyse(f, ctx)?;
+                display_comma_separated(columns).rewrite(f, ctx)?;
                 write!(
                     f,
                     ")"
@@ -65,31 +64,31 @@ impl SQLAnalyse for TableConstraint {
                 foreign_table,
                 referred_columns,
             } => {
-                display_constraint_name(name).analyse(f, ctx)?;
+                display_constraint_name(name).rewrite(f, ctx)?;
                 write!(
                     f,
                     "FOREIGN KEY ("
                 )?;
-                display_comma_separated(columns).analyse(f, ctx)?;
+                display_comma_separated(columns).rewrite(f, ctx)?;
                 write!(
                     f,
                     ") REFERENCES "
                 )?;
-                foreign_table.analyse(f, ctx)?;
+                foreign_table.rewrite(f, ctx)?;
                 write!(
                     f,
                     "("
                 )?;
-                display_comma_separated(referred_columns).analyse(f, ctx)?;
+                display_comma_separated(referred_columns).rewrite(f, ctx)?;
                 write!(
                     f,
                     ")"
                 )?;
             },
             TableConstraint::Check { name, expr } => {
-                display_constraint_name(name).analyse(f, ctx)?;
+                display_constraint_name(name).rewrite(f, ctx)?;
                 write!(f, "CHECK (")?;
-                expr.analyse(f, ctx)?;
+                expr.rewrite(f, ctx)?;
                 write!(f, ")")?;
             }
         };
@@ -98,13 +97,13 @@ impl SQLAnalyse for TableConstraint {
 }
 
 /// SQL column definition
-impl SQLAnalyse for ColumnDef {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for ColumnDef {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         write!(f, "{} ", self.name)?;
-        self.data_type.analyse(f, ctx)?;
+        self.data_type.rewrite(f, ctx)?;
         for option in &self.options {
             write!(f, " ")?;
-            option.analyse(f, ctx)?;
+            option.rewrite(f, ctx)?;
         }
         Ok(())
     }
@@ -126,18 +125,18 @@ impl SQLAnalyse for ColumnDef {
 /// For maximum flexibility, we don't distinguish between constraint and
 /// non-constraint options, lumping them all together under the umbrella of
 /// "column options," and we allow any column option to be named.
-impl SQLAnalyse for ColumnOptionDef {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        display_constraint_name(&self.name).analyse(f, ctx)?;
-        self.option.analyse(f, ctx)?;
+impl SQLReWrite for ColumnOptionDef {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        display_constraint_name(&self.name).rewrite(f, ctx)?;
+        self.option.rewrite(f, ctx)?;
         Ok(())
     }
 }
 
 /// `ColumnOption`s are modifiers that follow a column definition in a `CREATE
 /// TABLE` statement.
-impl SQLAnalyse for ColumnOption {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+impl SQLReWrite for ColumnOption {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         use ColumnOption::*;
         match self {
             Null => {
@@ -148,7 +147,7 @@ impl SQLAnalyse for ColumnOption {
             },
             Default(expr) => {
                 write!(f, "DEFAULT ")?;
-                expr.analyse(f, ctx)?;
+                expr.rewrite(f, ctx)?;
             },
             Unique { is_primary } => {
                 write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
@@ -161,12 +160,12 @@ impl SQLAnalyse for ColumnOption {
                     f,
                     "REFERENCES "
                 )?;
-                foreign_table.analyse(f, ctx)?;
+                foreign_table.rewrite(f, ctx)?;
                 write!(
                     f,
                     " ("
                 )?;
-                display_comma_separated(referred_columns).analyse(f, ctx)?;
+                display_comma_separated(referred_columns).rewrite(f, ctx)?;
                 write!(
                     f,
                     ")"
@@ -174,7 +173,7 @@ impl SQLAnalyse for ColumnOption {
             },
             Check(expr) => {
                 write!(f, "CHECK (")?;
-                expr.analyse(f, ctx)?;
+                expr.rewrite(f, ctx)?;
                 write!(f, ")")?;
             },
         };
@@ -182,10 +181,10 @@ impl SQLAnalyse for ColumnOption {
     }
 }
 
-fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl SQLAnalyse + 'a {
+fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl SQLReWrite + 'a {
     struct ConstraintName<'a>(&'a Option<Ident>);
-    impl<'a> SQLAnalyse for ConstraintName<'a> {
-        fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    impl<'a> SQLReWrite for ConstraintName<'a> {
+        fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
             if let Some(name) = self.0 {
                 write!(f, "CONSTRAINT {} ", name)?;
             }
