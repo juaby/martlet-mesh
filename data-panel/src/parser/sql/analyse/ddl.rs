@@ -17,19 +17,20 @@ use crate::parser::sql::analyse::{display_comma_separated, SQLAnalyse};
 
 use std::fmt::Write;
 use std::collections::HashMap;
+use crate::parser::sql::SQLStatementContext;
 
 pub type SAResult = crate::common::Result<()>;
 
 /// An `ALTER TABLE` (`Statement::AlterTable`) operation
 impl SQLAnalyse for AlterTableOperation {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             AlterTableOperation::AddConstraint(c) => {
-                write!(f, "ADD ")?;
-                c.analyse(f, ctx)?;
+                // write!(f, "ADD ")?;
+                c.analyse(ctx)?;
             },
             AlterTableOperation::DropConstraint { name } => {
-                write!(f, "DROP CONSTRAINT {}", name)?;
+                // write!(f, "DROP CONSTRAINT {}", name)?;
             },
         };
         Ok(())
@@ -39,24 +40,17 @@ impl SQLAnalyse for AlterTableOperation {
 /// A table-level constraint, specified in a `CREATE TABLE` or an
 /// `ALTER TABLE ADD <constraint>` statement.
 impl SQLAnalyse for TableConstraint {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             TableConstraint::Unique {
                 name,
                 columns,
                 is_primary,
             } => {
-                display_constraint_name(name).analyse(f, ctx)?;
-                write!(
-                    f,
-                    "{} (",
-                    if *is_primary { "PRIMARY KEY" } else { "UNIQUE" }
-                )?;
-                display_comma_separated(columns).analyse(f, ctx)?;
-                write!(
-                    f,
-                    ")"
-                )?;
+                display_constraint_name(name).analyse(ctx)?;
+                // write!(f, "{} (", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
+                display_comma_separated(columns).analyse(ctx)?;
+                // write!(f, ")")?;
             },
             TableConstraint::ForeignKey {
                 name,
@@ -64,32 +58,20 @@ impl SQLAnalyse for TableConstraint {
                 foreign_table,
                 referred_columns,
             } => {
-                display_constraint_name(name).analyse(f, ctx)?;
-                write!(
-                    f,
-                    "FOREIGN KEY ("
-                )?;
-                display_comma_separated(columns).analyse(f, ctx)?;
-                write!(
-                    f,
-                    ") REFERENCES "
-                )?;
-                foreign_table.analyse(f, ctx)?;
-                write!(
-                    f,
-                    "("
-                )?;
-                display_comma_separated(referred_columns).analyse(f, ctx)?;
-                write!(
-                    f,
-                    ")"
-                )?;
+                display_constraint_name(name).analyse(ctx)?;
+                // write!(f, "FOREIGN KEY (")?;
+                display_comma_separated(columns).analyse(ctx)?;
+                // write!(f, ") REFERENCES ")?;
+                foreign_table.analyse(ctx)?;
+                // write!(f, "(")?;
+                display_comma_separated(referred_columns).analyse(ctx)?;
+                // write!(f, ")")?;
             },
             TableConstraint::Check { name, expr } => {
-                display_constraint_name(name).analyse(f, ctx)?;
-                write!(f, "CHECK (")?;
-                expr.analyse(f, ctx)?;
-                write!(f, ")")?;
+                display_constraint_name(name).analyse(ctx)?;
+                // write!(f, "CHECK (")?;
+                expr.analyse(ctx)?;
+                // write!(f, ")")?;
             }
         };
         Ok(())
@@ -98,12 +80,12 @@ impl SQLAnalyse for TableConstraint {
 
 /// SQL column definition
 impl SQLAnalyse for ColumnDef {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        write!(f, "{} ", self.name)?;
-        self.data_type.analyse(f, ctx)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "{} ", self.name)?;
+        self.data_type.analyse(ctx)?;
         for option in &self.options {
-            write!(f, " ")?;
-            option.analyse(f, ctx)?;
+            // write!(f, " ")?;
+            option.analyse(ctx)?;
         }
         Ok(())
     }
@@ -126,9 +108,9 @@ impl SQLAnalyse for ColumnDef {
 /// non-constraint options, lumping them all together under the umbrella of
 /// "column options," and we allow any column option to be named.
 impl SQLAnalyse for ColumnOptionDef {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        display_constraint_name(&self.name).analyse(f, ctx)?;
-        self.option.analyse(f, ctx)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        display_constraint_name(&self.name).analyse(ctx)?;
+        self.option.analyse(ctx)?;
         Ok(())
     }
 }
@@ -136,45 +118,36 @@ impl SQLAnalyse for ColumnOptionDef {
 /// `ColumnOption`s are modifiers that follow a column definition in a `CREATE
 /// TABLE` statement.
 impl SQLAnalyse for ColumnOption {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use ColumnOption::*;
         match self {
             Null => {
-                write!(f, "NULL")?;
+                // write!(f, "NULL")?;
             },
             NotNull => {
-                write!(f, "NOT NULL")?;
+                // write!(f, "NOT NULL")?;
             },
             Default(expr) => {
-                write!(f, "DEFAULT ")?;
-                expr.analyse(f, ctx)?;
+                // write!(f, "DEFAULT ")?;
+                expr.analyse(ctx)?;
             },
             Unique { is_primary } => {
-                write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
+                // write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
             }
             ForeignKey {
                 foreign_table,
                 referred_columns,
             } => {
-                write!(
-                    f,
-                    "REFERENCES "
-                )?;
-                foreign_table.analyse(f, ctx)?;
-                write!(
-                    f,
-                    " ("
-                )?;
-                display_comma_separated(referred_columns).analyse(f, ctx)?;
-                write!(
-                    f,
-                    ")"
-                )?;
+                // write!(f, "REFERENCES ")?;
+                foreign_table.analyse(ctx)?;
+                // write!(f, " (")?;
+                display_comma_separated(referred_columns).analyse(ctx)?;
+                // write!(f, ")")?;
             },
             Check(expr) => {
-                write!(f, "CHECK (")?;
-                expr.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "CHECK (")?;
+                expr.analyse(ctx)?;
+                // write!(f, ")")?;
             },
         };
         Ok(())
@@ -184,9 +157,9 @@ impl SQLAnalyse for ColumnOption {
 fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl SQLAnalyse + 'a {
     struct ConstraintName<'a>(&'a Option<Ident>);
     impl<'a> SQLAnalyse for ConstraintName<'a> {
-        fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+        fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
             if let Some(name) = self.0 {
-                write!(f, "CONSTRAINT {} ", name)?;
+                // write!(f, "CONSTRAINT {} ", name)?;
             }
             Ok(())
         }

@@ -18,33 +18,34 @@ use std::collections::HashMap;
 pub type SAResult = crate::common::Result<()>;
 
 use crate::parser::sql::analyse::{display_comma_separated, SQLAnalyse};
+use crate::parser::sql::SQLStatementContext;
 
 /// The most complete variant of a `SELECT` query expression, optionally
 /// including `WITH`, `UNION` / other set operations, and `ORDER BY`.
 impl SQLAnalyse for Query {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         if !self.ctes.is_empty() {
-            write!(f, "WITH ")?;
-            display_comma_separated(&self.ctes).analyse(f, ctx)?;
-            write!(f, " ")?;
+            // write!(f, "WITH ")?;
+            // display_comma_separated(&self.ctes).analyse(ctx)?;
+            // write!(f, " ")?;
         }
-        self.body.analyse(f, ctx)?;
+        self.body.analyse(ctx)?;
         if !self.order_by.is_empty() {
-            write!(f, " ORDER BY ")?;
-            display_comma_separated(&self.order_by).analyse(f, ctx)?;
+            // write!(f, " ORDER BY ")?;
+            display_comma_separated(&self.order_by).analyse(ctx)?;
         }
         if let Some(ref limit) = self.limit {
-            write!(f, " LIMIT ")?;
-            limit.analyse(f, ctx)?;
+            // write!(f, " LIMIT ")?;
+            limit.analyse(ctx)?;
         }
         if let Some(ref offset) = self.offset {
-            write!(f, " OFFSET ")?;
-            offset.analyse(f, ctx)?;
-            write!(f, " ROWS")?;
+            // write!(f, " OFFSET ")?;
+            offset.analyse(ctx)?;
+            // write!(f, " ROWS")?;
         }
         if let Some(ref fetch) = self.fetch {
-            write!(f, " ")?;
-            fetch.analyse(f, ctx)?;
+            // write!(f, " ")?;
+            fetch.analyse(ctx)?;
         }
         Ok(())
     }
@@ -53,16 +54,16 @@ impl SQLAnalyse for Query {
 /// A node in a tree, representing a "query body" expression, roughly:
 /// `SELECT ... [ {UNION|EXCEPT|INTERSECT} SELECT ...]`
 impl SQLAnalyse for SetExpr {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             SetExpr::Select(s) => {
-                s.analyse(f, ctx)?;
+                s.analyse(ctx)?;
             },
             SetExpr::Query(q) => {
-                q.analyse(f, ctx)?;
+                q.analyse(ctx)?;
             },
             SetExpr::Values(v) => {
-                v.analyse(f, ctx)?;
+                v.analyse(ctx)?;
             },
             SetExpr::SetOperation {
                 left,
@@ -71,12 +72,12 @@ impl SQLAnalyse for SetExpr {
                 all,
             } => {
                 let all_str = if *all { " ALL" } else { "" };
-                left.analyse(f, ctx)?;
-                write!(f, " ")?;
-                op.analyse(f, ctx)?;
-                write!(f, "{}", all_str)?;
-                write!(f, " ")?;
-                right.analyse(f, ctx)?;
+                left.analyse(ctx)?;
+                // write!(f, " ")?;
+                op.analyse(ctx)?;
+                // write!(f, "{}", all_str)?;
+                // write!(f, " ")?;
+                right.analyse(ctx)?;
             }
         };
         Ok(())
@@ -84,12 +85,12 @@ impl SQLAnalyse for SetExpr {
 }
 
 impl SQLAnalyse for SetOperator {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        f.write_str(match self {
-            SetOperator::Union => "UNION",
-            SetOperator::Except => "EXCEPT",
-            SetOperator::Intersect => "INTERSECT",
-        })?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // f.write_str(match self {
+        //     SetOperator::Union => "UNION",
+        //     SetOperator::Except => "EXCEPT",
+        //     SetOperator::Intersect => "INTERSECT",
+        // })?;
         Ok(())
     }
 }
@@ -98,32 +99,25 @@ impl SQLAnalyse for SetOperator {
 /// appear either as the only body item of an `SQLQuery`, or as an operand
 /// to a set operation like `UNION`.
 impl SQLAnalyse for Select {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        write!(
-            f,
-            "SELECT"
-        )?;
-        write!(
-            f,
-            "{} ",
-            if self.distinct { " DISTINCT" } else { "" }
-        )?;
-        display_comma_separated(&self.projection).analyse(f, ctx)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "SELECT")?;
+        // write!(f, "{} ", if self.distinct { " DISTINCT" } else { "" })?;
+        display_comma_separated(&self.projection).analyse(ctx)?;
         if !self.from.is_empty() {
-            write!(f, " FROM ")?;
-            display_comma_separated(&self.from).analyse(f, ctx)?;
+            // write!(f, " FROM ")?;
+            display_comma_separated(&self.from).analyse(ctx)?;
         }
         if let Some(ref selection) = self.selection {
-            write!(f, " WHERE ")?;
-            selection.analyse(f, ctx)?;
+            // write!(f, " WHERE ")?;
+            selection.analyse(ctx)?;
         }
         if !self.group_by.is_empty() {
-            write!(f, " GROUP BY ")?;
-            display_comma_separated(&self.group_by).analyse(f, ctx)?;
+            // write!(f, " GROUP BY ")?;
+            display_comma_separated(&self.group_by).analyse(ctx)?;
         }
         if let Some(ref having) = self.having {
-            write!(f, " HAVING ")?;
-            having.analyse(f, ctx)?;
+            // write!(f, " HAVING ")?;
+            having.analyse(ctx)?;
         }
         Ok(())
     }
@@ -134,32 +128,32 @@ impl SQLAnalyse for Select {
 /// of the columns returned by the query. The parser does not validate that the
 /// number of columns in the query matches the number of columns in the query.
 impl SQLAnalyse for Cte {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        self.alias.analyse(f, ctx)?;
-        write!(f, " AS (")?;
-        self.query.analyse(f, ctx)?;
-        write!(f, ")")?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        self.alias.analyse(ctx)?;
+        // write!(f, " AS (")?;
+        self.query.analyse(ctx)?;
+        // write!(f, ")")?;
         Ok(())
     }
 }
 
 /// One item of the comma-separated list following `SELECT`
 impl SQLAnalyse for SelectItem {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match &self {
             SelectItem::UnnamedExpr(expr) => {
-                expr.analyse(f, ctx)?;
+                expr.analyse(ctx)?;
             },
             SelectItem::ExprWithAlias { expr, alias } => {
-                expr.analyse(f, ctx)?;
-                write!(f, " AS {}", alias)?;
+                expr.analyse(ctx)?;
+                // write!(f, " AS {}", alias)?;
             },
             SelectItem::QualifiedWildcard(prefix) => {
-                prefix.analyse(f, ctx)?;
-                write!(f, ".*")?;
+                prefix.analyse(ctx)?;
+                // write!(f, ".*")?;
             },
             SelectItem::Wildcard => {
-                write!(f, "*")?;
+                // write!(f, "*")?;
             },
         }
         Ok(())
@@ -167,10 +161,10 @@ impl SQLAnalyse for SelectItem {
 }
 
 impl SQLAnalyse for TableWithJoins {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        self.relation.analyse(f, ctx)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        self.relation.analyse(ctx)?;
         for join in &self.joins {
-            join.analyse(f, ctx)?;
+            join.analyse(ctx)?;
         }
         Ok(())
     }
@@ -178,7 +172,7 @@ impl SQLAnalyse for TableWithJoins {
 
 /// A table name or a parenthesized subquery with an optional alias
 impl SQLAnalyse for TableFactor {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             TableFactor::Table {
                 name,
@@ -186,20 +180,27 @@ impl SQLAnalyse for TableFactor {
                 args,
                 with_hints,
             } => {
-                name.analyse(f, ctx)?; // TODO
+                // name.analyse(ctx)?; // TODO
+                let table_name = &name.0[0];
+
                 if !args.is_empty() {
-                    write!(f, "(")?;
-                    display_comma_separated(args).analyse(f, ctx)?;
-                    write!(f, ")")?;
+                    // write!(f, "(")?;
+                    display_comma_separated(args).analyse(ctx)?;
+                    // write!(f, ")")?;
                 }
+                let mut alias_name = String::new();
                 if let Some(alias) = alias {
-                    write!(f, " AS ")?;
-                    alias.analyse(f, ctx)?;  // TODO
+                    // write!(f, " AS ")?;
+                    alias.analyse(ctx)?;  // TODO
+                    alias_name = alias.name.clone();
                 }
+
+                ctx.add_table(table_name.clone(), alias_name);
+
                 if !with_hints.is_empty() {
-                    write!(f, " WITH (")?;
-                    display_comma_separated(with_hints).analyse(f, ctx)?;
-                    write!(f, ")")?;
+                    // write!(f, " WITH (")?;
+                    display_comma_separated(with_hints).analyse(ctx)?;
+                    // write!(f, ")")?;
                 }
                 Ok(())
             }
@@ -209,21 +210,21 @@ impl SQLAnalyse for TableFactor {
                 alias,
             } => {
                 if *lateral {
-                    write!(f, "LATERAL ")?;
+                    // write!(f, "LATERAL ")?;
                 }
-                write!(f, "(")?;
-                subquery.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "(")?;
+                subquery.analyse(ctx)?;
+                // write!(f, ")")?;
                 if let Some(alias) = alias {
-                    write!(f, " AS ")?;
-                    alias.analyse(f, ctx)?;
+                    // write!(f, " AS ")?;
+                    alias.analyse(ctx)?;
                 }
                 Ok(())
             }
             TableFactor::NestedJoin(table_reference) => {
-                write!(f, "(")?;
-                table_reference.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "(")?;
+                table_reference.analyse(ctx)?;
+                // write!(f, ")")?;
                 Ok(())
             },
         }
@@ -231,19 +232,19 @@ impl SQLAnalyse for TableFactor {
 }
 
 impl SQLAnalyse for TableAlias {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        write!(f, "{}", self.name)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "{}", self.name)?;
         if !self.columns.is_empty() {
-            write!(f, " (")?;
-            display_comma_separated(&self.columns).analyse(f, ctx)?;
-            write!(f, ")")?;
+            // write!(f, " (")?;
+            display_comma_separated(&self.columns).analyse(ctx)?;
+            // write!(f, ")")?;
         }
         Ok(())
     }
 }
 
 impl SQLAnalyse for Join {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         fn prefix(constraint: &JoinConstraint) -> &'static str {
             match constraint {
                 JoinConstraint::Natural => "NATURAL ",
@@ -253,17 +254,17 @@ impl SQLAnalyse for Join {
         fn suffix<'a>(constraint: &'a JoinConstraint) -> impl SQLAnalyse + 'a {
             struct Suffix<'a>(&'a JoinConstraint);
             impl<'a> SQLAnalyse for Suffix<'a> {
-                fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+                fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
                     match self.0 {
                         JoinConstraint::On(expr) => {
-                            write!(f, " ON ")?;
-                            expr.analyse(f, ctx)?;
+                            // write!(f, " ON ")?;
+                            expr.analyse(ctx)?;
                             Ok(())
                         },
                         JoinConstraint::Using(attrs) => {
-                            write!(f, " USING(")?;
-                            display_comma_separated(attrs).analyse(f, ctx)?;
-                            write!(f, ")")?;
+                            // write!(f, " USING(")?;
+                            display_comma_separated(attrs).analyse(ctx)?;
+                            // write!(f, ")")?;
                             Ok(())
                         }
                         _ => Ok(()),
@@ -274,52 +275,36 @@ impl SQLAnalyse for Join {
         }
         match &self.join_operator {
             JoinOperator::Inner(constraint) => {
-                write!(
-                    f,
-                    " {}JOIN ",
-                    prefix(constraint)
-                )?;
-                self.relation.analyse(f, ctx)?;
-                suffix(constraint).analyse(f, ctx)?;
+                // write!(f, " {}JOIN ", prefix(constraint))?;
+                self.relation.analyse(ctx)?;
+                suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::LeftOuter(constraint) => {
-                write!(
-                    f,
-                    " {}LEFT JOIN ",
-                    prefix(constraint)
-                )?;
-                self.relation.analyse(f, ctx)?;
-                suffix(constraint).analyse(f, ctx)?;
+                // write!(f, " {}LEFT JOIN ", prefix(constraint))?;
+                self.relation.analyse(ctx)?;
+                suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::RightOuter(constraint) => {
-                write!(
-                    f,
-                    " {}RIGHT JOIN ",
-                    prefix(constraint)
-                )?;
-                self.relation.analyse(f, ctx)?;
-                suffix(constraint).analyse(f, ctx)?;
+                // write!(f, " {}RIGHT JOIN ", prefix(constraint))?;
+                self.relation.analyse(ctx)?;
+                suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::FullOuter(constraint) => {
-                write!(
-                    f,
-                    " {}FULL JOIN ",
-                    prefix(constraint)
-                )?;
-                self.relation.analyse(f, ctx)?;
-                suffix(constraint).analyse(f, ctx)?;
+                // write!(f, " {}FULL JOIN ", prefix(constraint))?;
+                self.relation.analyse(ctx)?;
+                suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::CrossJoin => {
-                write!(f, " CROSS JOIN ")?;
-                self.relation.analyse(f, ctx)?;
+                // write!(f, " CROSS JOIN ")?;
+                self.relation.analyse(ctx)?;
             },
             JoinOperator::CrossApply => {
-                write!(f, " CROSS APPLY ")?;
-                self.relation.analyse(f, ctx)?;
+                // write!(f, " CROSS APPLY ")?;
+                self.relation.analyse(ctx)?;
             },
             JoinOperator::OuterApply => {
-                write!(f, " OUTER APPLY ")?;
-                self.relation.analyse(f, ctx)?;
+                // write!(f, " OUTER APPLY ")?;
+                self.relation.analyse(ctx)?;
             },
         }
         Ok(())
@@ -327,18 +312,18 @@ impl SQLAnalyse for Join {
 }
 
 impl SQLAnalyse for OrderByExpr {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self.asc {
             Some(true) => {
-                self.expr.analyse(f, ctx)?; // TODO
-                write!(f, " ASC")?;
+                self.expr.analyse(ctx)?; // TODO
+                // write!(f, " ASC")?;
             },
             Some(false) => {
-                self.expr.analyse(f, ctx)?; // TODO
-                write!(f, " DESC")?;
+                self.expr.analyse(ctx)?; // TODO
+                // write!(f, " DESC")?;
             },
             None => {
-                self.expr.analyse(f, ctx)?; // TODO
+                self.expr.analyse(ctx)?; // TODO
             },
         }
         Ok(())
@@ -346,30 +331,30 @@ impl SQLAnalyse for OrderByExpr {
 }
 
 impl SQLAnalyse for Fetch {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         let extension = if self.with_ties { "WITH TIES" } else { "ONLY" };
         if let Some(ref quantity) = self.quantity {
             let percent = if self.percent { " PERCENT" } else { "" };
-            write!(f, "FETCH FIRST ")?;
-            quantity.analyse(f, ctx)?;
-            write!(f, "{} ROWS {}",  percent, extension)?;
+            // write!(f, "FETCH FIRST ")?;
+            quantity.analyse(ctx)?;
+            // write!(f, "{} ROWS {}",  percent, extension)?;
         } else {
-            write!(f, "FETCH FIRST ROWS {}", extension)?;
+            // write!(f, "FETCH FIRST ROWS {}", extension)?;
         }
         Ok(())
     }
 }
 
 impl SQLAnalyse for Values {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        write!(f, "VALUES ")?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "VALUES ")?;
         let mut delim = "";
         for row in &self.0 {
-            write!(f, "{}", delim)?;
+            // write!(f, "{}", delim)?;
             delim = ", ";
-            write!(f, "(")?;
-            display_comma_separated(row).analyse(f, ctx)?; // TODO
-            write!(f, ")")?;
+            // write!(f, "(")?;
+            display_comma_separated(row).analyse(ctx)?; // TODO
+            // write!(f, ")")?;
         }
         Ok(())
     }

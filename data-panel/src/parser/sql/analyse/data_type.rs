@@ -15,89 +15,90 @@ use sqlparser::ast::DataType;
 use std::fmt::Write;
 use std::collections::HashMap;
 use crate::parser::sql::analyse::SQLAnalyse;
+use crate::parser::sql::SQLStatementContext;
 
 pub type SAResult = crate::common::Result<()>;
 
 /// SQL data types
 impl SQLAnalyse for DataType {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             DataType::Char(size) => {
-                format_type_with_optional_length(f, "char", size)?;
+                // format_type_with_optional_length(f, "char", size)?;
             },
             DataType::Varchar(size) => {
-                format_type_with_optional_length(f, "character varying", size)?;
+                // format_type_with_optional_length(f, "character varying", size)?;
             }
             DataType::Uuid => {
-                write!(f, "uuid")?;
+                // write!(f, "uuid")?;
             },
             DataType::Clob(size) => {
-                write!(f, "clob({})", size)?;
+                // write!(f, "clob({})", size)?;
             },
             DataType::Binary(size) => {
-                write!(f, "binary({})", size)?;
+                // write!(f, "binary({})", size)?;
             },
             DataType::Varbinary(size) => {
-                write!(f, "varbinary({})", size)?
+                // write!(f, "varbinary({})", size)?
             },
             DataType::Blob(size) => {
-                write!(f, "blob({})", size)?;
+                // write!(f, "blob({})", size)?;
             },
             DataType::Decimal(precision, scale) => {
                 if let Some(scale) = scale {
-                    write!(f, "numeric({},{})", precision.unwrap(), scale)?;
+                    // write!(f, "numeric({},{})", precision.unwrap(), scale)?;
                 } else {
-                    format_type_with_optional_length(f, "numeric", precision)?;
+                    // format_type_with_optional_length(f, "numeric", precision)?;
                 }
             }
             DataType::Float(size) => {
-                format_type_with_optional_length(f, "float", size)?;
+                // format_type_with_optional_length(f, "float", size)?;
             },
             DataType::SmallInt => {
-                write!(f, "smallint")?;
+                // write!(f, "smallint")?;
             },
             DataType::Int => {
-                write!(f, "int")?;
+                // write!(f, "int")?;
             },
             DataType::BigInt => {
-                write!(f, "bigint")?;
+                // write!(f, "bigint")?;
             },
             DataType::Real => {
-                write!(f, "real")?;
+                // write!(f, "real")?;
             },
             DataType::Double => {
-                write!(f, "double")?;
+                // write!(f, "double")?;
             },
             DataType::Boolean => {
-                write!(f, "boolean")?;
+                // write!(f, "boolean")?;
             },
             DataType::Date => {
-                write!(f, "date")?;
+                // write!(f, "date")?;
             },
             DataType::Time => {
-                write!(f, "time")?;
+                // write!(f, "time")?;
             },
             DataType::Timestamp => {
-                write!(f, "timestamp")?;
+                // write!(f, "timestamp")?;
             },
             DataType::Interval => {
-                write!(f, "interval")?;
+                // write!(f, "interval")?;
             },
             DataType::Regclass => {
-                write!(f, "regclass")?;
+                // write!(f, "regclass")?;
             },
             DataType::Text => {
-                write!(f, "text")?;
+                // write!(f, "text")?;
             },
             DataType::Bytea => {
-                write!(f, "bytea")?;
+                // write!(f, "bytea")?;
             },
             DataType::Array(ty) => {
-                ty.analyse(f, ctx)?;
-                write!(f, "[]")?;
+                ty.analyse(ctx)?;
+                // write!(f, "[]")?;
             },
             DataType::Custom(ty) => {
-                ty.analyse(f, ctx)?;
+                ty.analyse(ctx)?;
             },
         };
         Ok(())
@@ -109,9 +110,9 @@ fn format_type_with_optional_length(
     sql_type: &'static str,
     len: &Option<u64>,
 ) -> SAResult {
-    write!(f, "{}", sql_type)?;
+    // write!(f, "{}", sql_type)?;
     if let Some(len) = len {
-        write!(f, "({})", len)?;
+        // write!(f, "({})", len)?;
     }
     Ok(())
 }

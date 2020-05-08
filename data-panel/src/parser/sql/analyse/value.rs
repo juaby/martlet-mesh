@@ -17,44 +17,45 @@ use sqlparser::ast::{Value, DateTimeField};
 use std::fmt::Write;
 use std::collections::HashMap;
 use crate::parser::sql::analyse::SQLAnalyse;
+use crate::parser::sql::SQLStatementContext;
 
 pub type SAResult = crate::common::Result<()>;
 
 /// Primitive SQL values such as number and string
 impl SQLAnalyse for Value {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             Value::Number(v) => {
-                write!(f, "{}", v)?;
+                // write!(f, "{}", v)?;
             },
             Value::SingleQuotedString(v) => {
-                write!(f, "'")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
-                write!(f, "'")?;
+                // write!(f, "'")?;
+                escape_single_quote_string(v).analyse(ctx)?;
+                // write!(f, "'")?;
             },
             Value::NationalStringLiteral(v) => {
-                write!(f, "N'{}'", v)?;
+                // write!(f, "N'{}'", v)?;
             },
             Value::HexStringLiteral(v) => {
-                write!(f, "X'{}'", v)?;
+                // write!(f, "X'{}'", v)?;
             },
             Value::Boolean(v) => {
-                write!(f, "{}", v)?
+                // write!(f, "{}", v)?
             },
             Value::Date(v) => {
-                write!(f, "DATE '")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
-                write!(f, "'")?;
+                // write!(f, "DATE '")?;
+                escape_single_quote_string(v).analyse(ctx)?;
+                // write!(f, "'")?;
             },
             Value::Time(v) => {
-                write!(f, "TIME '")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
-                write!(f, "'")?;
+                // write!(f, "TIME '")?;
+                escape_single_quote_string(v).analyse(ctx)?;
+                // write!(f, "'")?;
             },
             Value::Timestamp(v) => {
-                write!(f, "TIMESTAMP '")?;
-                escape_single_quote_string(v).analyse(f, ctx)?;
-                write!(f, "'")?;
+                // write!(f, "TIMESTAMP '")?;
+                escape_single_quote_string(v).analyse(ctx)?;
+                // write!(f, "'")?;
             },
             Value::Interval {
                 value,
@@ -66,17 +67,9 @@ impl SQLAnalyse for Value {
                 // When the leading field is SECOND, the parser guarantees that
                 // the last field is None.
                 assert!(last_field.is_none());
-                write!(
-                    f,
-                    "INTERVAL '"
-                )?;
-                escape_single_quote_string(value).analyse(f, ctx)?;
-                write!(
-                    f,
-                    "' SECOND ({}, {})",
-                    leading_precision,
-                    fractional_seconds_precision
-                )?;
+                // write!(f, "INTERVAL '")?;
+                escape_single_quote_string(value).analyse(ctx)?;
+                // write!(f, "' SECOND ({}, {})", leading_precision, fractional_seconds_precision)?;
             }
             Value::Interval {
                 value,
@@ -85,29 +78,23 @@ impl SQLAnalyse for Value {
                 last_field,
                 fractional_seconds_precision,
             } => {
-                write!(
-                    f,
-                    "INTERVAL '"
-                )?;
-                escape_single_quote_string(value).analyse(f, ctx)?;
-                write!(
-                    f,
-                    "' "
-                )?;
-                leading_field.analyse(f, ctx)?;
+                // write!(f, "INTERVAL '")?;
+                escape_single_quote_string(value).analyse(ctx)?;
+                // write!(f, "' ")?;
+                leading_field.analyse(ctx)?;
                 if let Some(leading_precision) = leading_precision {
-                    write!(f, " ({})", leading_precision)?;
+                    // write!(f, " ({})", leading_precision)?;
                 }
                 if let Some(last_field) = last_field {
-                    write!(f, " TO ")?;
-                    last_field.analyse(f, ctx)?;
+                    // write!(f, " TO ")?;
+                    last_field.analyse(ctx)?;
                 }
                 if let Some(fractional_seconds_precision) = fractional_seconds_precision {
-                    write!(f, " ({})", fractional_seconds_precision)?;
+                    // write!(f, " ({})", fractional_seconds_precision)?;
                 }
             }
             Value::Null => {
-                write!(f, "NULL")?;
+                // write!(f, "NULL")?;
             },
         };
         Ok(())
@@ -115,15 +102,15 @@ impl SQLAnalyse for Value {
 }
 
 impl SQLAnalyse for DateTimeField {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        f.write_str(match self {
-            DateTimeField::Year => "YEAR",
-            DateTimeField::Month => "MONTH",
-            DateTimeField::Day => "DAY",
-            DateTimeField::Hour => "HOUR",
-            DateTimeField::Minute => "MINUTE",
-            DateTimeField::Second => "SECOND",
-        })?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // f.write_str(match self {
+        //     DateTimeField::Year => "YEAR",
+        //     DateTimeField::Month => "MONTH",
+        //     DateTimeField::Day => "DAY",
+        //     DateTimeField::Hour => "HOUR",
+        //     DateTimeField::Minute => "MINUTE",
+        //     DateTimeField::Second => "SECOND",
+        // })?;
         Ok(())
     }
 }
@@ -131,12 +118,12 @@ impl SQLAnalyse for DateTimeField {
 pub struct EscapeSingleQuoteString<'a>(&'a str);
 
 impl<'a> SQLAnalyse for EscapeSingleQuoteString<'a> {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         for c in self.0.chars() {
             if c == '\'' {
-                write!(f, "\'\'")?;
+                // write!(f, "\'\'")?;
             } else {
-                write!(f, "{}", c)?;
+                // write!(f, "{}", c)?;
             }
         }
         Ok(())

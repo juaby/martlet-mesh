@@ -21,11 +21,12 @@ mod value;
 use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
 use std::fmt::Write;
 use std::collections::HashMap;
+use crate::parser::sql::SQLStatementContext;
 
 pub type SAResult = crate::common::Result<()>;
 
 pub trait SQLAnalyse {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult;
 }
 
 struct DisplaySeparated<'a, T>
@@ -40,12 +41,12 @@ impl<'a, T> SQLAnalyse for DisplaySeparated<'a, T>
 where
     T: SQLAnalyse,
 {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         let mut delim = "";
         for t in self.slice {
-            write!(f, "{}", delim)?;
+            // write!(f, "{}", delim)?;
             delim = self.sep;
-            t.analyse(f, ctx)?;
+            t.analyse(ctx)?;
         }
         Ok(())
     }
@@ -66,15 +67,15 @@ where
 }
 
 impl SQLAnalyse for ObjectName {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        display_separated(&self.0, ".").analyse(f, ctx)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        display_separated(&self.0, ".").analyse(ctx)?;
         Ok(())
     }
 }
 
 impl SQLAnalyse for String {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        f.write_str(&self)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // f.write_str(&self)?;
         Ok(())
     }
 }
@@ -85,62 +86,48 @@ impl SQLAnalyse for String {
 /// (e.g. boolean vs string), so the caller must handle expressions of
 /// inappropriate type, like `WHERE 1` or `SELECT 1=1`, as necessary.
 impl SQLAnalyse for Expr {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             Expr::Identifier(s) => {
-                f.write_str(s)?;
+                // f.write_str(s)?;
             },
             Expr::Wildcard => {
-                f.write_str("*")?;
+                // f.write_str("*")?;
             },
             Expr::QualifiedWildcard(q) => {
-                display_separated(q, ".").analyse(f, ctx)?;
-                write!(f, ".*")?;
+                display_separated(q, ".").analyse(ctx)?;
+                // write!(f, ".*")?;
             },
             Expr::CompoundIdentifier(s) => {
-                display_separated(s, ".").analyse(f, ctx)?;
+                display_separated(s, ".").analyse(ctx)?;
             },
             Expr::IsNull(ast) => {
-                ast.analyse(f, ctx)?;
-                write!(f, " IS NULL")?;
+                ast.analyse(ctx)?;
+                // write!(f, " IS NULL")?;
             },
             Expr::IsNotNull(ast) => {
-                ast.analyse(f, ctx)?;
-                write!(f, " IS NOT NULL")?;
+                ast.analyse(ctx)?;
+                // write!(f, " IS NOT NULL")?;
             },
             Expr::InList {
                 expr,
                 list,
                 negated,
             } => {
-                expr.analyse(f, ctx)?; // TODO
-                write!(
-                    f,
-                    " {}IN (",
-                    if *negated { "NOT " } else { "" }
-                )?;
-                display_comma_separated(list).analyse(f, ctx)?; // TODO
-                write!(
-                    f,
-                    ")"
-                )?;
+                expr.analyse(ctx)?; // TODO
+                // write!(f, " {}IN (", if *negated { "NOT " } else { "" })?;
+                display_comma_separated(list).analyse(ctx)?; // TODO
+                // write!(f, ")")?;
             },
             Expr::InSubquery {
                 expr,
                 subquery,
                 negated,
             } => {
-                expr.analyse(f, ctx)?;
-                write!(
-                    f,
-                    " {}IN (",
-                    if *negated { "NOT " } else { "" }
-                )?;
-                subquery.analyse(f, ctx)?;
-                write!(
-                    f,
-                    ")"
-                )?;
+                expr.analyse(ctx)?;
+                // write!(f, " {}IN (", if *negated { "NOT " } else { "" })?;
+                subquery.analyse(ctx)?;
+                // write!(f, ")")?;
             },
             Expr::Between {
                 expr,
@@ -148,60 +135,53 @@ impl SQLAnalyse for Expr {
                 low,
                 high,
             } => {
-                expr.analyse(f, ctx)?; // TODO
-                write!(
-                    f,
-                    " {}BETWEEN ",
-                    if *negated { "NOT " } else { "" }
-                )?;
-                low.analyse(f, ctx)?; // TODO
-                write!(
-                    f,
-                    " AND "
-                )?;
-                high.analyse(f, ctx)?; // TODO
+                expr.analyse(ctx)?; // TODO
+                // write!(f, " {}BETWEEN ", if *negated { "NOT " } else { "" })?;
+                low.analyse(ctx)?; // TODO
+                // write!(f, " AND ")?;
+                high.analyse(ctx)?; // TODO
             },
             Expr::BinaryOp { left, op, right } => {
-                left.analyse(f, ctx)?; // TODO
-                write!(f, " ")?;
-                op.analyse(f, ctx)?; // TODO
-                write!(f, " ")?;
-                right.analyse(f, ctx)?; // TODO
+                left.analyse(ctx)?; // TODO
+                // write!(f, " ")?;
+                op.analyse(ctx)?; // TODO
+                // write!(f, " ")?;
+                right.analyse(ctx)?; // TODO
             },
             Expr::UnaryOp { op, expr } => {
-                op.analyse(f, ctx)?;
-                write!(f, " ")?;
-                expr.analyse(f, ctx)?;
+                op.analyse(ctx)?;
+                // write!(f, " ")?;
+                expr.analyse(ctx)?;
             },
             Expr::Cast { expr, data_type } => {
-                write!(f, "CAST(")?;
-                expr.analyse(f, ctx)?;
-                write!(f, " AS ")?;
-                data_type.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "CAST(")?;
+                expr.analyse(ctx)?;
+                // write!(f, " AS ")?;
+                data_type.analyse(ctx)?;
+                // write!(f, ")")?;
             },
             Expr::Extract { field, expr } => {
-                write!(f, "EXTRACT(")?;
-                field.analyse(f, ctx)?;
-                write!(f, " FROM ")?;
-                expr.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "EXTRACT(")?;
+                field.analyse(ctx)?;
+                // write!(f, " FROM ")?;
+                expr.analyse(ctx)?;
+                // write!(f, ")")?;
             },
             Expr::Collate { expr, collation } => {
-                expr.analyse(f, ctx)?;
-                write!(f, " COLLATE ")?;
-                collation.analyse(f, ctx)?;
+                expr.analyse(ctx)?;
+                // write!(f, " COLLATE ")?;
+                collation.analyse(ctx)?;
             },
             Expr::Nested(ast) => {
-                write!(f, "(")?;
-                ast.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "(")?;
+                ast.analyse(ctx)?;
+                // write!(f, ")")?;
             },
             Expr::Value(v) => {
-                v.analyse(f, ctx)?;
+                v.analyse(ctx)?;
             },
             Expr::Function(fun) => {
-                fun.analyse(f, ctx)?;
+                fun.analyse(ctx)?;
             },
             Expr::Case {
                 operand,
@@ -209,33 +189,33 @@ impl SQLAnalyse for Expr {
                 results,
                 else_result,
             } => {
-                f.write_str("CASE")?;
+                // f.write_str("CASE")?;
                 if let Some(operand) = operand {
-                    write!(f, " ")?;
-                    operand.analyse(f, ctx)?;
+                    // write!(f, " ")?;
+                    operand.analyse(ctx)?;
                 }
                 for (c, r) in conditions.iter().zip(results) {
-                    write!(f, " WHEN ")?;
-                    c.analyse(f, ctx)?;
-                    write!(f, " THEN ")?;
-                    r.analyse(f, ctx)?;
+                    // write!(f, " WHEN ")?;
+                    c.analyse(ctx)?;
+                    // write!(f, " THEN ")?;
+                    r.analyse(ctx)?;
                 }
 
                 if let Some(else_result) = else_result {
-                    write!(f, " ELSE ")?;
-                    else_result.analyse(f, ctx)?;
+                    // write!(f, " ELSE ")?;
+                    else_result.analyse(ctx)?;
                 }
-                f.write_str(" END")?;
+                // f.write_str(" END")?;
             }
             Expr::Exists(s) => {
-                write!(f, "EXISTS (")?;
-                s.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "EXISTS (")?;
+                s.analyse(ctx)?;
+                // write!(f, ")")?;
             },
             Expr::Subquery(s) => {
-                write!(f, "(")?;
-                s.analyse(f, ctx)?;
-                write!(f, ")")?;
+                // write!(f, "(")?;
+                s.analyse(ctx)?;
+                // write!(f, ")")?;
             },
         };
         Ok(())
@@ -244,41 +224,32 @@ impl SQLAnalyse for Expr {
 
 /// A window specification (i.e. `OVER (PARTITION BY .. ORDER BY .. etc.)`)
 impl SQLAnalyse for WindowSpec {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         let mut delim = "";
         if !self.partition_by.is_empty() {
             delim = " ";
-            write!(
-                f,
-                "PARTITION BY "
-            )?;
-            display_comma_separated(&self.partition_by).analyse(f, ctx)?;
+            // write!(f, "PARTITION BY ")?;
+            display_comma_separated(&self.partition_by).analyse(ctx)?;
         }
         if !self.order_by.is_empty() {
-            f.write_str(delim)?;
+            // f.write_str(delim)?;
             delim = " ";
-            write!(f, "ORDER BY ")?;
-            display_comma_separated(&self.order_by).analyse(f, ctx)?;
+            // write!(f, "ORDER BY ")?;
+            display_comma_separated(&self.order_by).analyse(ctx)?;
         }
         if let Some(window_frame) = &self.window_frame {
             if let Some(end_bound) = &window_frame.end_bound {
-                f.write_str(delim)?;
-                window_frame.units.analyse(f, ctx)?;
-                write!(
-                    f,
-                    " BETWEEN "
-                )?;
-                window_frame.start_bound.analyse(f, ctx)?;
-                write!(
-                    f,
-                    " AND "
-                )?;
-                end_bound.analyse(f, ctx)?;
+                // f.write_str(delim)?;
+                window_frame.units.analyse(ctx)?;
+                // write!(f, " BETWEEN ")?;
+                window_frame.start_bound.analyse(ctx)?;
+                // write!(f, " AND ")?;
+                end_bound.analyse(ctx)?;
             } else {
-                f.write_str(delim)?;
-                window_frame.units.analyse(f, ctx)?;
-                write!(f, " ")?;
-                window_frame.start_bound.analyse(f, ctx)?;
+                // f.write_str(delim)?;
+                window_frame.units.analyse(ctx)?;
+                // write!(f, " ")?;
+                window_frame.start_bound.analyse(ctx)?;
             }
         }
         Ok(())
@@ -291,26 +262,26 @@ impl SQLAnalyse for WindowSpec {
 /// Note: The parser does not validate the specified bounds; the caller should
 /// reject invalid bounds like `ROWS UNBOUNDED FOLLOWING` before execution.
 impl SQLAnalyse for WindowFrameUnits {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        f.write_str(match self {
-            WindowFrameUnits::Rows => "ROWS",
-            WindowFrameUnits::Range => "RANGE",
-            WindowFrameUnits::Groups => "GROUPS",
-        })?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // f.write_str(match self {
+        //     WindowFrameUnits::Rows => "ROWS",
+        //     WindowFrameUnits::Range => "RANGE",
+        //     WindowFrameUnits::Groups => "GROUPS",
+        // })?;
         Ok(())
     }
 }
 
 /// Specifies [WindowFrame]'s `start_bound` and `end_bound`
 impl SQLAnalyse for WindowFrameBound {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        match self {
-            WindowFrameBound::CurrentRow => f.write_str("CURRENT ROW"),
-            WindowFrameBound::Preceding(None) => f.write_str("UNBOUNDED PRECEDING"),
-            WindowFrameBound::Following(None) => f.write_str("UNBOUNDED FOLLOWING"),
-            WindowFrameBound::Preceding(Some(n)) => write!(f, "{} PRECEDING", n),
-            WindowFrameBound::Following(Some(n)) => write!(f, "{} FOLLOWING", n),
-        }?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // match self {
+        //     WindowFrameBound::CurrentRow => f.write_str("CURRENT ROW"),
+        //     WindowFrameBound::Preceding(None) => f.write_str("UNBOUNDED PRECEDING"),
+        //     WindowFrameBound::Following(None) => f.write_str("UNBOUNDED FOLLOWING"),
+        //     WindowFrameBound::Preceding(Some(n)) => write!(f, "{} PRECEDING", n),
+        //     WindowFrameBound::Following(Some(n)) => write!(f, "{} FOLLOWING", n),
+        // }?;
         Ok(())
     }
 }
@@ -320,79 +291,79 @@ impl SQLAnalyse for Statement {
     // Clippy thinks this function is too complicated, but it is painful to
     // split up without extracting structs for each `Statement` variant.
     #[allow(clippy::cognitive_complexity)]
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             Statement::Query(s) => {
-                s.analyse(f, ctx)?;
+                s.analyse(ctx)?;
             },
             Statement::Insert {
                 table_name,
                 columns,
                 source,
             } => {
-                write!(f, "INSERT INTO ")?;
-                table_name.analyse(f, ctx)?; // TODO
-                write!(f, " ")?;
+                // write!(f, "INSERT INTO ")?;
+                table_name.analyse(ctx)?; // TODO
+                // write!(f, " ")?;
                 if !columns.is_empty() {
-                    write!(f, "(")?;
-                    display_comma_separated(columns).analyse(f, ctx)?; // TODO
-                    write!(f, ") ")?;
+                    // write!(f, "(")?;
+                    display_comma_separated(columns).analyse(ctx)?; // TODO
+                    // write!(f, ") ")?;
                 }
-                source.analyse(f, ctx)?;
+                source.analyse(ctx)?;
             }
             Statement::Copy {
                 table_name,
                 columns,
                 values,
             } => {
-                write!(f, "COPY ")?;
-                table_name.analyse(f, ctx)?;
+                // write!(f, "COPY ")?;
+                table_name.analyse(ctx)?;
                 if !columns.is_empty() {
-                    write!(f, " (")?;
-                    display_comma_separated(columns).analyse(f, ctx)?;
-                    write!(f, ")")?;
+                    // write!(f, " (")?;
+                    display_comma_separated(columns).analyse(ctx)?;
+                    // write!(f, ")")?;
                 }
-                write!(f, " FROM stdin; ")?;
+                // write!(f, " FROM stdin; ")?;
                 if !values.is_empty() {
-                    writeln!(f)?;
+                    // writeln!(f)?;
                     let mut delim = "";
                     for v in values {
-                        write!(f, "{}", delim)?;
+                        // write!(f, "{}", delim)?;
                         delim = "\t";
                         if let Some(v) = v {
-                            write!(f, "{}", v)?;
+                            // write!(f, "{}", v)?;
                         } else {
-                            write!(f, "\\N")?;
+                            // write!(f, "\\N")?;
                         }
                     }
                 }
-                write!(f, "\n\\.")?;
+                // write!(f, "\n\\.")?;
             }
             Statement::Update {
                 table_name,
                 assignments,
                 selection,
             } => {
-                write!(f, "UPDATE ")?;
-                table_name.analyse(f, ctx)?; // TODO
+                // write!(f, "UPDATE ")?;
+                table_name.analyse(ctx)?; // TODO
                 if !assignments.is_empty() {
-                    write!(f, " SET ")?;
-                    display_comma_separated(assignments).analyse(f, ctx)?;
+                    // write!(f, " SET ")?;
+                    display_comma_separated(assignments).analyse(ctx)?;
                 }
                 if let Some(selection) = selection {
-                    write!(f, " WHERE ")?;
-                    selection.analyse(f, ctx)?; // TODO
+                    // write!(f, " WHERE ")?;
+                    selection.analyse(ctx)?; // TODO
                 }
             }
             Statement::Delete {
                 table_name,
                 selection,
             } => {
-                write!(f, "DELETE FROM ")?;
-                table_name.analyse(f, ctx)?; // TODO
+                // write!(f, "DELETE FROM ")?;
+                table_name.analyse(ctx)?; // TODO
                 if let Some(selection) = selection {
-                    write!(f, " WHERE ")?;
-                    selection.analyse(f, ctx)?; // TODO
+                    // write!(f, " WHERE ")?;
+                    selection.analyse(ctx)?; // TODO
                 }
             }
             Statement::CreateView {
@@ -402,28 +373,28 @@ impl SQLAnalyse for Statement {
                 materialized,
                 with_options,
             } => {
-                write!(f, "CREATE")?;
+                // write!(f, "CREATE")?;
                 if *materialized {
-                    write!(f, " MATERIALIZED")?;
+                    // write!(f, " MATERIALIZED")?;
                 }
 
-                write!(f, " VIEW ")?;
-                name.analyse(f, ctx)?;
+                // write!(f, " VIEW ")?;
+                name.analyse(ctx)?;
 
                 if !with_options.is_empty() {
-                    write!(f, " WITH (")?;
-                    display_comma_separated(with_options).analyse(f, ctx)?;
-                    write!(f, ")")?;
+                    // write!(f, " WITH (")?;
+                    display_comma_separated(with_options).analyse(ctx)?;
+                    // write!(f, ")")?;
                 }
 
                 if !columns.is_empty() {
-                    write!(f, " (")?;
-                    display_comma_separated(columns).analyse(f, ctx)?;
-                    write!(f, ")")?;
+                    // write!(f, " (")?;
+                    display_comma_separated(columns).analyse(ctx)?;
+                    // write!(f, ")")?;
                 }
 
-                write!(f, " AS ")?;
-                query.analyse(f, ctx)?;
+                // write!(f, " AS ")?;
+                query.analyse(ctx)?;
             }
             Statement::CreateTable {
                 name,
@@ -434,46 +405,32 @@ impl SQLAnalyse for Statement {
                 file_format,
                 location,
             } => {
-                write!(
-                    f,
-                    "CREATE {}TABLE ",
-                    if *external { "EXTERNAL " } else { "" }
-                )?;
-                name.analyse(f, ctx)?;
-                write!(
-                    f,
-                    " ("
-                )?;
-                display_comma_separated(columns).analyse(f, ctx)?;
+                // write!(f, "CREATE {}TABLE ", if *external { "EXTERNAL " } else { "" })?;
+                name.analyse(ctx)?;
+                // write!(f, " (")?;
+                display_comma_separated(columns).analyse(ctx)?;
                 if !constraints.is_empty() {
-                    write!(f, ", ")?;
-                    display_comma_separated(constraints).analyse(f, ctx)?;
+                    // write!(f, ", ")?;
+                    display_comma_separated(constraints).analyse(ctx)?;
                 }
-                write!(f, ")")?;
+                // write!(f, ")")?;
 
                 if *external {
-                    write!(
-                        f,
-                        " STORED AS "
-                    )?;
-                    file_format.as_ref().unwrap().analyse(f, ctx)?;
-                    write!(
-                        f,
-                        " LOCATION '{}'",
-                        location.as_ref().unwrap()
-                    )?;
+                    // write!(f, " STORED AS ")?;
+                    file_format.as_ref().unwrap().analyse(ctx)?;
+                    // write!(f, " LOCATION '{}'", location.as_ref().unwrap())?;
                 }
                 if !with_options.is_empty() {
-                    write!(f, " WITH (")?;
-                    display_comma_separated(with_options).analyse(f, ctx)?;
-                    write!(f, ")")?;
+                    // write!(f, " WITH (")?;
+                    display_comma_separated(with_options).analyse(ctx)?;
+                    // write!(f, ")")?;
                 }
             }
             Statement::AlterTable { name, operation } => {
-                write!(f, "ALTER TABLE ")?;
-                name.analyse(f, ctx)?;
-                write!(f, " ")?;
-                operation.analyse(f, ctx)?;
+                // write!(f, "ALTER TABLE ")?;
+                name.analyse(ctx)?;
+                // write!(f, " ")?;
+                operation.analyse(ctx)?;
             }
             Statement::Drop {
                 object_type,
@@ -481,37 +438,26 @@ impl SQLAnalyse for Statement {
                 names,
                 cascade,
             } => {
-                write!(
-                    f,
-                    "DROP "
-                )?;
-                object_type.analyse(f, ctx)?;
-                write!(
-                    f,
-                    "{} ",
-                    if *if_exists { " IF EXISTS" } else { "" }
-                )?;
-                display_comma_separated(names).analyse(f, ctx)?;
-                write!(
-                    f,
-                    "{}",
-                    if *cascade { " CASCADE" } else { "" }
-                )?;
+                // write!(f, "DROP ")?;
+                object_type.analyse(ctx)?;
+                // write!(f, "{} ", if *if_exists { " IF EXISTS" } else { "" })?;
+                display_comma_separated(names).analyse(ctx)?;
+                // write!(f, "{}", if *cascade { " CASCADE" } else { "" })?;
             },
             Statement::SetVariable {
                 local,
                 variable,
                 value,
             } => {
-                f.write_str("SET ")?;
+                // f.write_str("SET ")?;
                 if *local {
-                    f.write_str("LOCAL ")?;
+                    // f.write_str("LOCAL ")?;
                 }
-                write!(f, "{} = ", variable)?;
-                value.analyse(f, ctx)?;
+                // write!(f, "{} = ", variable)?;
+                value.analyse(ctx)?;
             }
             Statement::ShowVariable { variable } => {
-                write!(f, "SHOW {}", variable)?;
+                // write!(f, "SHOW {}", variable)?;
             },
             Statement::ShowColumns {
                 extended,
@@ -519,39 +465,39 @@ impl SQLAnalyse for Statement {
                 table_name,
                 filter,
             } => {
-                f.write_str("SHOW ")?;
+                // f.write_str("SHOW ")?;
                 if *extended {
-                    f.write_str("EXTENDED ")?;
+                    // f.write_str("EXTENDED ")?;
                 }
                 if *full {
-                    f.write_str("FULL ")?;
+                    // f.write_str("FULL ")?;
                 }
-                write!(f, "COLUMNS FROM ")?;
-                table_name.analyse(f, ctx)?;
+                // write!(f, "COLUMNS FROM ")?;
+                table_name.analyse(ctx)?;
                 if let Some(filter) = filter {
-                    write!(f, " ")?;
-                    filter.analyse(f, ctx)?;
+                    // write!(f, " ")?;
+                    filter.analyse(ctx)?;
                 }
             }
             Statement::StartTransaction { modes } => {
-                write!(f, "START TRANSACTION")?;
+                // write!(f, "START TRANSACTION")?;
                 if !modes.is_empty() {
-                    write!(f, " ")?;
-                    display_comma_separated(modes).analyse(f, ctx)?;
+                    // write!(f, " ")?;
+                    display_comma_separated(modes).analyse(ctx)?;
                 }
             }
             Statement::SetTransaction { modes } => {
-                write!(f, "SET TRANSACTION")?;
+                // write!(f, "SET TRANSACTION")?;
                 if !modes.is_empty() {
-                    write!(f, " ")?;
-                    display_comma_separated(modes).analyse(f, ctx)?;
+                    // write!(f, " ")?;
+                    display_comma_separated(modes).analyse(ctx)?;
                 }
             }
             Statement::Commit { chain } => {
-                write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" },)?;
+                // write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" },)?;
             }
             Statement::Rollback { chain } => {
-                write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+                // write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
             }
         };
         Ok(())
@@ -560,30 +506,23 @@ impl SQLAnalyse for Statement {
 
 /// SQL assignment `foo = expr` as used in SQLUpdate
 impl SQLAnalyse for Assignment {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        write!(f, "{} = ", self.id)?;
-        self.value.analyse(f, ctx)
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "{} = ", self.id)?;
+        self.value.analyse(ctx)
     }
 }
 
 /// A function call
 impl SQLAnalyse for Function {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        self.name.analyse(f, ctx)?;
-        write!(
-            f,
-            "({}",
-            if self.distinct { "DISTINCT " } else { "" }
-        )?;
-        display_comma_separated(&self.args).analyse(f, ctx)?;
-        write!(
-            f,
-            ")"
-        )?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        self.name.analyse(ctx)?;
+        // write!(f, "({}", if self.distinct { "DISTINCT " } else { "" })?;
+        display_comma_separated(&self.args).analyse(ctx)?;
+        // write!(f, ")")?;
         if let Some(o) = &self.over {
-            write!(f, " OVER (")?;
-            o.analyse(f, ctx)?;
-            write!(f, ")")?;
+            // write!(f, " OVER (")?;
+            o.analyse(ctx)?;
+            // write!(f, ")")?;
         }
         Ok(())
     }
@@ -591,49 +530,49 @@ impl SQLAnalyse for Function {
 
 /// External table's available file format
 impl SQLAnalyse for FileFormat {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use self::FileFormat::*;
-        f.write_str(match self {
-            TEXTFILE => "TEXTFILE",
-            SEQUENCEFILE => "SEQUENCEFILE",
-            ORC => "ORC",
-            PARQUET => "PARQUET",
-            AVRO => "AVRO",
-            RCFILE => "RCFILE",
-            JSONFILE => "TEXTFILE",
-        })?;
+        // f.write_str(match self {
+        //     TEXTFILE => "TEXTFILE",
+        //     SEQUENCEFILE => "SEQUENCEFILE",
+        //     ORC => "ORC",
+        //     PARQUET => "PARQUET",
+        //     AVRO => "AVRO",
+        //     RCFILE => "RCFILE",
+        //     JSONFILE => "TEXTFILE",
+        // })?;
         Ok(())
     }
 }
 
 impl SQLAnalyse for ObjectType {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        f.write_str(match self {
-            ObjectType::Table => "TABLE",
-            ObjectType::View => "VIEW",
-        })?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // f.write_str(match self {
+        //     ObjectType::Table => "TABLE",
+        //     ObjectType::View => "VIEW",
+        // })?;
         Ok(())
     }
 }
 
 impl SQLAnalyse for SqlOption {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
-        write!(f, "{} = ", self.name)?;
-        self.value.analyse(f, ctx)?;
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "{} = ", self.name)?;
+        self.value.analyse(ctx)?;
         Ok(())
     }
 }
 
 impl SQLAnalyse for TransactionMode {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use TransactionMode::*;
         match self {
             AccessMode(access_mode) => {
-                access_mode.analyse(f, ctx)?
+                access_mode.analyse(ctx)?
             },
             IsolationLevel(iso_level) => {
-                write!(f, "ISOLATION LEVEL ")?;
-                iso_level.analyse(f, ctx)?;
+                // write!(f, "ISOLATION LEVEL ")?;
+                iso_level.analyse(ctx)?;
             },
         }
         Ok(())
@@ -641,41 +580,41 @@ impl SQLAnalyse for TransactionMode {
 }
 
 impl SQLAnalyse for TransactionAccessMode {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use TransactionAccessMode::*;
-        f.write_str(match self {
-            ReadOnly => "READ ONLY",
-            ReadWrite => "READ WRITE",
-        })?;
+        // f.write_str(match self {
+        //     ReadOnly => "READ ONLY",
+        //     ReadWrite => "READ WRITE",
+        // })?;
         Ok(())
     }
 }
 
 impl SQLAnalyse for TransactionIsolationLevel {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use TransactionIsolationLevel::*;
-        f.write_str(match self {
-            ReadUncommitted => "READ UNCOMMITTED",
-            ReadCommitted => "READ COMMITTED",
-            RepeatableRead => "REPEATABLE READ",
-            Serializable => "SERIALIZABLE",
-        })?;
+        // f.write_str(match self {
+        //     ReadUncommitted => "READ UNCOMMITTED",
+        //     ReadCommitted => "READ COMMITTED",
+        //     RepeatableRead => "REPEATABLE READ",
+        //     Serializable => "SERIALIZABLE",
+        // })?;
         Ok(())
     }
 }
 
 impl SQLAnalyse for ShowStatementFilter {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use ShowStatementFilter::*;
         match self {
             Like(pattern) => {
-                write!(f, "LIKE '")?;
-                value::escape_single_quote_string(pattern).analyse(f, ctx)?;
-                write!(f, "'")?;
+                // write!(f, "LIKE '")?;
+                value::escape_single_quote_string(pattern).analyse(ctx)?;
+                // write!(f, "'")?;
             },
             Where(expr) => {
-                write!(f, "WHERE ")?;
-                expr.analyse(f, ctx)?
+                // write!(f, "WHERE ")?;
+                expr.analyse(ctx)?
             },
         }
         Ok(())
@@ -683,14 +622,14 @@ impl SQLAnalyse for ShowStatementFilter {
 }
 
 impl SQLAnalyse for SetVariableValue {
-    fn analyse(&self, f: &mut String, ctx: &HashMap<String, String>) -> SAResult {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         use SetVariableValue::*;
         match self {
             Ident(ident) => {
-                f.write_str(ident)?;
+                // f.write_str(ident)?;
             },
             Literal(literal) => {
-                literal.analyse(f, ctx)?
+                literal.analyse(ctx)?
             }
         }
         Ok(())
@@ -702,19 +641,22 @@ mod tests {
     use crate::parser::sql::mysql::parser;
     use crate::parser::sql::rewrite::SQLReWrite;
     use std::collections::HashMap;
+    use crate::parser::sql::analyse::SQLAnalyse;
+    use crate::parser::sql::SQLStatementContext;
 
     #[test]
     fn test_rewrite() {
         let sql = "SELECT a, b, 123, myfunc(b) \
-           FROM table_1 \
-           WHERE a > b AND b < 100 \
+           FROM table_1 as t, table_2 as t2, (select * from table_3 as t3) as t4 left join table_5 as t5 on t5.id = t1.id \
+           WHERE a > b AND b < 100 and c = ? and d = 'are' \
            ORDER BY a DESC, b";
         //let sql = "insert into test (a, b, c) values (1, 1, ?)";
         let mut ast = parser(sql.to_string());
         let stmt = ast.pop().unwrap();
         let mut resql = String::new();
-        let mut ctx: HashMap<String, String> = HashMap::new();
-        stmt.rewrite(&mut resql, &ctx).unwrap();
-        assert_eq!(sql.to_uppercase(), resql.to_uppercase());
+        let mut ctx = SQLStatementContext::new();
+        stmt.analyse(&mut ctx).unwrap();
+        println!("{:?}", stmt.to_string());
+        println!("{:?}", ctx.tables);
     }
 }
