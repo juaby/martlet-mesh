@@ -21,7 +21,7 @@ mod value;
 use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
 use std::fmt::Write;
 use std::collections::HashMap;
-use crate::parser::sql::SQLStatementContext;
+use crate::parser::sql::{SQLStatementContext, SelectStatementContext};
 
 pub type SAResult = crate::common::Result<()>;
 
@@ -294,6 +294,7 @@ impl SQLAnalyse for Statement {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             Statement::Query(s) => {
+                *ctx = SQLStatementContext::Select(SelectStatementContext::new());
                 s.analyse(ctx)?;
             },
             Statement::Insert {
@@ -654,9 +655,16 @@ mod tests {
         let mut ast = parser(sql.to_string());
         let stmt = ast.pop().unwrap();
         let mut resql = String::new();
-        let mut ctx = SQLStatementContext::new();
+        let mut ctx = SQLStatementContext::Default;
         stmt.analyse(&mut ctx).unwrap();
         println!("{:?}", stmt.to_string());
-        println!("{:?}", ctx.tables);
+        match ctx {
+            SQLStatementContext::Select(mut s) => {
+                println!("{:?}", s.common_ctx.tables);
+            },
+            SQLStatementContext::Update(_) => {},
+            SQLStatementContext::Delete(_) => {},
+            SQLStatementContext::Default => {},
+        }
     }
 }
