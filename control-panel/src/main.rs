@@ -1,4 +1,5 @@
 mod pilot;
+mod galley;
 mod mixer;
 mod citadel;
 mod api;

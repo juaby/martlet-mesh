@@ -25,16 +25,14 @@ impl SQLStatementContext {
     }
 }
 
-pub struct DMLStatementContext {
+pub struct CommonStatementContext {
     tables: HashMap<String, String>,
-    route_columns: HashMap<String, String>,
 }
 
-impl DMLStatementContext {
+impl CommonStatementContext {
     pub fn new() -> Self {
-        DMLStatementContext {
+        CommonStatementContext {
             tables: Default::default(),
-            route_columns: Default::default()
         }
     }
 
@@ -44,13 +42,13 @@ impl DMLStatementContext {
 }
 
 pub struct SelectStatementContext {
-    common_ctx: DMLStatementContext,
+    common_ctx: CommonStatementContext,
 }
 
 impl SelectStatementContext {
     pub fn new() -> Self {
         SelectStatementContext {
-            common_ctx: DMLStatementContext::new()
+            common_ctx: CommonStatementContext::new()
         }
     }
 
@@ -60,13 +58,13 @@ impl SelectStatementContext {
 }
 
 pub struct UpdateStatementContext {
-    common_ctx: DMLStatementContext,
+    common_ctx: CommonStatementContext,
 }
 
 impl UpdateStatementContext {
     pub fn new() -> Self {
         UpdateStatementContext {
-            common_ctx: DMLStatementContext::new()
+            common_ctx: CommonStatementContext::new()
         }
     }
 
@@ -76,13 +74,13 @@ impl UpdateStatementContext {
 }
 
 pub struct DeleteStatementContext {
-    common_ctx: DMLStatementContext,
+    common_ctx: CommonStatementContext,
 }
 
 impl DeleteStatementContext {
     pub fn new() -> Self {
         DeleteStatementContext {
-            common_ctx: DMLStatementContext::new()
+            common_ctx: CommonStatementContext::new()
         }
     }
 
