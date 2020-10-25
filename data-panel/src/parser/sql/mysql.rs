@@ -25,18 +25,8 @@ impl Dialect for MySqlDialect {
     }
 }
 
-pub fn parser(sql: String) -> Vec<Statement> {
+pub fn parser(sql: &str) -> Vec<Statement> {
     let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
 
-    let ast = if sql.to_uppercase().starts_with("SET NAMES") {
-        vec![Statement::SetVariable {
-            local: false,
-            variable: "".to_string(),
-            value: Ident("".to_string())
-        }]
-    } else {
-        Parser::parse_sql(&dialect, sql).unwrap()
-    };
-
-    ast
+    Parser::parse_sql(&dialect, sql).unwrap()
 }

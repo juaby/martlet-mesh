@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query};
+use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, Offset};
 
 use std::fmt::Write;
 use std::collections::HashMap;
@@ -326,25 +326,6 @@ impl SQLReWrite for Join {
     }
 }
 
-impl SQLReWrite for OrderByExpr {
-    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        match self.asc {
-            Some(true) => {
-                self.expr.rewrite(f, ctx)?;
-                write!(f, " ASC")?;
-            },
-            Some(false) => {
-                self.expr.rewrite(f, ctx)?;
-                write!(f, " DESC")?;
-            },
-            None => {
-                self.expr.rewrite(f, ctx)?;
-            },
-        }
-        Ok(())
-    }
-}
-
 impl SQLReWrite for Fetch {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         let extension = if self.with_ties { "WITH TIES" } else { "ONLY" };
@@ -371,6 +352,30 @@ impl SQLReWrite for Values {
             display_comma_separated(row).rewrite(f, ctx)?;
             write!(f, ")")?;
         }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for OrderByExpr {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        self.expr.rewrite(f, ctx)?;
+        match self.asc {
+            Some(true) => write!(f, " ASC")?,
+            Some(false) => write!(f, " DESC")?,
+            None => (),
+        }
+        match self.nulls_first {
+            Some(true) => write!(f, " NULLS FIRST")?,
+            Some(false) => write!(f, " NULLS LAST")?,
+            None => (),
+        }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for Offset {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        write!(f, "OFFSET {}{}", self.value, self.rows);
         Ok(())
     }
 }

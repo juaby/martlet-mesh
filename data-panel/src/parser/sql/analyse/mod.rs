@@ -18,7 +18,7 @@ mod operator;
 mod query;
 mod value;
 
-use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
+use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, Ident};
 use std::fmt::Write;
 use std::collections::HashMap;
 use crate::parser::sql::{SQLStatementContext, SelectStatementContext};
@@ -76,6 +76,12 @@ impl SQLAnalyse for ObjectName {
 impl SQLAnalyse for String {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         // f.write_str(&self)?;
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for Ident {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         Ok(())
     }
 }
@@ -217,6 +223,8 @@ impl SQLAnalyse for Expr {
                 s.analyse(ctx)?;
                 // write!(f, ")")?;
             },
+            Expr::TypedString { data_type: _, value: _ } => {}
+            Expr::ListAgg(_) => {}
         };
         Ok(())
     }
@@ -402,30 +410,106 @@ impl SQLAnalyse for Statement {
                 columns,
                 constraints,
                 with_options,
+                if_not_exists,
                 external,
                 file_format,
                 location,
+                query,
+                without_rowid,
             } => {
-                // write!(f, "CREATE {}TABLE ", if *external { "EXTERNAL " } else { "" })?;
+                // We want to allow the following options
+                // Empty column list, allowed by PostgreSQL:
+                //   `CREATE TABLE t ()`
+                // No columns provided for CREATE TABLE AS:
+                //   `CREATE TABLE t AS SELECT a from t2`
+                // Columns provided for CREATE TABLE AS:
+                //   `CREATE TABLE t (a INT) AS SELECT a from t2`
+                /*write!(
+                    f,
+                    "CREATE {external}TABLE {if_not_exists}",
+                    external = if *external { "EXTERNAL " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" }
+                )?;*/
                 name.analyse(ctx)?;
-                // write!(f, " (")?;
-                display_comma_separated(columns).analyse(ctx)?;
-                if !constraints.is_empty() {
-                    // write!(f, ", ")?;
+                if !columns.is_empty() || !constraints.is_empty() {
+                    // write!(f, " (")?;
+                    display_comma_separated(columns).analyse(ctx)?;
+                    if !columns.is_empty() && !constraints.is_empty() {
+                        // write!(f, ", ")?;
+                    }
                     display_comma_separated(constraints).analyse(ctx)?;
+                    // write!(f, ")")?;
+                } else if query.is_none() {
+                    // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
+                    // write!(f, " ()")?;
                 }
-                // write!(f, ")")?;
+                // Only for SQLite
+                if *without_rowid {
+                    // write!(f, " WITHOUT ROWID")?;
+                }
 
                 if *external {
                     // write!(f, " STORED AS ")?;
                     file_format.as_ref().unwrap().analyse(ctx)?;
-                    // write!(f, " LOCATION '{}'", location.as_ref().unwrap())?;
+                    /*write!(
+                        f,
+                        " LOCATION '{}'",
+                        location.as_ref().unwrap()
+                    )?;*/
                 }
                 if !with_options.is_empty() {
                     // write!(f, " WITH (")?;
                     display_comma_separated(with_options).analyse(ctx)?;
                     // write!(f, ")")?;
                 }
+                if let Some(query) = query {
+                    // write!(f, " AS ")?;
+                    query.analyse(ctx)?;
+                }
+            }
+            Statement::CreateVirtualTable {
+                name,
+                if_not_exists,
+                module_name,
+                module_args,
+            } => {
+                /*write!(
+                    f,
+                    "CREATE VIRTUAL TABLE {if_not_exists}",
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" }
+                )?;*/
+                name.analyse(ctx)?;
+                // write!(f, " USING ")?;
+                module_name.analyse(ctx)?;
+                if !module_args.is_empty() {
+                    // write!(f, " (")?;
+                    display_comma_separated(module_args).analyse(ctx)?;
+                    // write!(f, ")")?;
+                }
+            }
+            Statement::CreateIndex {
+                name,
+                table_name,
+                columns,
+                unique,
+                if_not_exists,
+            } => {
+                /*write!(
+                    f,
+                    "CREATE{}INDEX{}",
+                    if *unique { " UNIQUE " } else { " " },
+                    if *if_not_exists {
+                        " IF NOT EXISTS "
+                    } else {
+                        " "
+                    }
+                )?;*/
+                name.analyse(ctx)?;
+                // write!(f, " ON ")?;
+                table_name.analyse(ctx)?;
+                // write!(f, "(")?;
+                display_separated(columns, ",").analyse(ctx)?;
+                // write!(f, ");")?;
             }
             Statement::AlterTable { name, operation } => {
                 // write!(f, "ALTER TABLE ")?;
@@ -499,6 +583,19 @@ impl SQLAnalyse for Statement {
             }
             Statement::Rollback { chain } => {
                 // write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+            }
+            Statement::CreateSchema { schema_name } => {
+                // write!(f, "CREATE SCHEMA ")?;
+                schema_name.analyse(ctx)?;
+            },
+            Statement::Assert { condition, message } => {
+                // write!(f, "ASSERT ")?;
+                condition.analyse(ctx)?;
+
+                if let Some(m) = message {
+                    // write!(f, " AS ")?;
+                    m.analyse(ctx)?;
+                }
             }
         };
         Ok(())

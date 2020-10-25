@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query};
+use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, Offset, OffsetRows};
 
 use std::fmt::Write;
 use std::collections::HashMap;
@@ -192,10 +192,10 @@ impl SQLAnalyse for TableFactor {
                 if let Some(alias) = alias {
                     // write!(f, " AS ")?;
                     alias.analyse(ctx)?;  // TODO
-                    alias_name = alias.name.clone();
+                    alias_name = alias.name.value.clone();
                 }
 
-                ctx.add_table(table_name.clone(), alias_name);
+                ctx.add_table(table_name.value.clone(), alias_name);
 
                 if !with_hints.is_empty() {
                     // write!(f, " WITH (")?;
@@ -355,6 +355,31 @@ impl SQLAnalyse for Values {
             // write!(f, "(")?;
             display_comma_separated(row).analyse(ctx)?; // TODO
             // write!(f, ")")?;
+        }
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for Offset {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "OFFSET {}{}", self.value, self.rows);
+        self.value.analyse(ctx)?;
+        self.rows.analyse(ctx)?;
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for OffsetRows {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        match self {
+            OffsetRows::None => {
+            },
+            OffsetRows::Row => {
+                // write!(f, " ROW")
+            },
+            OffsetRows::Rows => {
+                // write!(f, " ROWS")
+            },
         }
         Ok(())
     }

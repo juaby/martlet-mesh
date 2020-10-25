@@ -39,6 +39,7 @@ impl SQLReWrite for BinaryOperator {
             BinaryOperator::Multiply => "*",
             BinaryOperator::Divide => "/",
             BinaryOperator::Modulus => "%",
+            BinaryOperator::StringConcat => "||",
             BinaryOperator::Gt => ">",
             BinaryOperator::Lt => "<",
             BinaryOperator::GtEq => ">=",
@@ -49,6 +50,9 @@ impl SQLReWrite for BinaryOperator {
             BinaryOperator::Or => "OR",
             BinaryOperator::Like => "LIKE",
             BinaryOperator::NotLike => "NOT LIKE",
+            BinaryOperator::BitwiseOr => "|",
+            BinaryOperator::BitwiseAnd => "&",
+            BinaryOperator::BitwiseXor => "^",
         })?;
         Ok(())
     }

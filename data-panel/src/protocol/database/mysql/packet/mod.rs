@@ -103,6 +103,10 @@ impl MySQLPacketPayload {
         self.bytes_mut.put_i64_le(val);
     }
 
+    pub fn put_f32_le(&mut self, val: f32) {
+        self.bytes_mut.put_f32_le(val);
+    }
+
     pub fn put_f64_le(&mut self, val: f64) {
         self.bytes_mut.put_f64_le(val);
     }

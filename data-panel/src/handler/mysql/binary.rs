@@ -21,7 +21,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
         // TODO
         let sql = command_packet.get_sql();
         let sql = String::from_utf8_lossy(sql.as_slice());
-        let statements = parser::sql::mysql::parser(sql.to_string());
+        let statements = parser::sql::mysql::parser(sql.as_ref());
 
         let mut payloads: Vec<Bytes> = Vec::new();
 
@@ -153,7 +153,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
         let cow_sql = String::from_utf8_lossy(command_sql.as_slice());
         let sql = cow_sql.to_string();
         println!("SQL = {}", sql);
-        let mut statement = parser::sql::mysql::parser(cow_sql.to_string());
+        let mut statement = parser::sql::mysql::parser(cow_sql.as_ref());
         let statement = statement.pop().unwrap();
 
         match statement {
@@ -168,6 +168,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
                         PrepareParamValue::Int(int) => params_value.push(Value::Int(int)),
                         PrepareParamValue::UInt(uint) => params_value.push(Value::UInt(uint)),
                         PrepareParamValue::Float(f) => params_value.push(Value::Float(f)),
+                        PrepareParamValue::Double(d) => params_value.push(Value::Double(d)),
                         PrepareParamValue::Date(year, month, day, hour, minutes, seconds, micro_seconds) => params_value.push(Value::Date(year, month, day, hour, minutes, seconds, micro_seconds)),
                         PrepareParamValue::Time(is_negative, days, hours, minutes, seconds, micro_seconds) => params_value.push(Value::Time(is_negative, days, hours, minutes, seconds, micro_seconds)),
                     }
@@ -240,6 +241,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
                                 Value::Int(int) => row_values.push(PrepareParamValue::Int(int)),
                                 Value::UInt(uint) => row_values.push(PrepareParamValue::UInt(uint)),
                                 Value::Float(f) => row_values.push(PrepareParamValue::Float(f)),
+                                Value::Double(d) => row_values.push(PrepareParamValue::Double(d)),
                                 Value::Date(year, month, day, hour, minutes, seconds, micro_seconds) => row_values.push(PrepareParamValue::Date(year, month, day, hour, minutes, seconds, micro_seconds)),
                                 Value::Time(is_negative, days, hours, minutes, seconds, micro_seconds) => row_values.push(PrepareParamValue::Time(is_negative, days, hours, minutes, seconds, micro_seconds)),
                             }

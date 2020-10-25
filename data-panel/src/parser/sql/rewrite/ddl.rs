@@ -28,9 +28,50 @@ impl SQLReWrite for AlterTableOperation {
                 write!(f, "ADD ")?;
                 c.rewrite(f, ctx)?;
             },
-            AlterTableOperation::DropConstraint { name } => {
-                write!(f, "DROP CONSTRAINT {}", name)?;
+            AlterTableOperation::AddColumn { column_def } => {
+                write!(f, "ADD COLUMN ")?;
+                column_def.rewrite(f, ctx)?;
             },
+            AlterTableOperation::DropConstraint { name } => {
+                write!(f, "DROP CONSTRAINT ")?;
+                name.rewrite(f, ctx)?;
+            },
+            AlterTableOperation::DropColumn {
+                column_name,
+                if_exists,
+                cascade,
+            } => {
+                write!(
+                    f,
+                    "DROP COLUMN {}",
+                    if *if_exists { "IF EXISTS " } else { "" }
+                )?;
+                column_name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    "{}",
+                    if *cascade { " CASCADE" } else { "" }
+                )?;
+            },
+            AlterTableOperation::RenameColumn {
+                old_column_name,
+                new_column_name,
+            } => {
+                write!(
+                    f,
+                    "RENAME COLUMN "
+                )?;
+                old_column_name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    " TO "
+                )?;
+                new_column_name.rewrite(f, ctx)?;
+            },
+            AlterTableOperation::RenameTable { table_name } => {
+                write!(f, "RENAME TO ")?;
+                table_name.rewrite(f, ctx)?;
+            }
         };
         Ok(())
     }
@@ -155,6 +196,8 @@ impl SQLReWrite for ColumnOption {
             ForeignKey {
                 foreign_table,
                 referred_columns,
+                on_delete,
+                on_update,
             } => {
                 write!(
                     f,

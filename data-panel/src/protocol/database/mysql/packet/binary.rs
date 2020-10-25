@@ -349,7 +349,8 @@ pub enum PrepareParamValue {
     Bytes(Vec<u8>),
     Int(i64),
     UInt(u64),
-    Float(f64),
+    Float(f32),
+    Double(f64),
     /// year, month, day, hour, minutes, seconds, micro seconds
     Date(u16, u8, u8, u8, u8, u8, u32),
     /// is negative, days, hours, minutes, seconds, micro seconds
@@ -401,7 +402,7 @@ pub fn read_bin(payload: &mut MySQLPacketPayload, column_type: MySQLColumnType, 
             }
         }
         MySQLColumnType::MysqlTypeFloat => Ok(PrepareParamValue::Float(payload.get_f32_le().into())),
-        MySQLColumnType::MysqlTypeDouble => Ok(PrepareParamValue::Float(payload.get_f64_le())),
+        MySQLColumnType::MysqlTypeDouble => Ok(PrepareParamValue::Double(payload.get_f64_le())),
         MySQLColumnType::MysqlTypeTimestamp
         | MySQLColumnType::MysqlTypeDate
         | MySQLColumnType::MysqlTypeDatetime => {
@@ -469,6 +470,9 @@ pub fn write_bin(value: &PrepareParamValue, payload: &mut MySQLPacketPayload) {
             payload.put_u64_le(x);
         }
         PrepareParamValue::Float(x) => {
+            payload.put_f32_le(x);
+        }
+        PrepareParamValue::Double(x) => {
             payload.put_f64_le(x);
         }
         PrepareParamValue::Date(0u16, 0u8, 0u8, 0u8, 0u8, 0u8, 0u32) => {
