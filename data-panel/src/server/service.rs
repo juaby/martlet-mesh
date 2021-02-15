@@ -9,9 +9,9 @@ pub async fn serve() -> Result<(), Box<dyn Error>> {
     // and set up our TCP listener to accept connections.
     let addr = env::args()
         .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:3306".to_string());
+        .unwrap_or_else(|| "127.0.0.1:8306".to_string());
 
-    let mut listener = TcpListener::bind(&addr).await?;
+    let listener = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
 
     // Create the shared state of this server that will be shared amongst all

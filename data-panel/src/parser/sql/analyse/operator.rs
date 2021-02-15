@@ -12,8 +12,7 @@
 
 use sqlparser::ast::{BinaryOperator, UnaryOperator};
 
-use std::fmt::Write;
-use std::collections::HashMap;
+// use std::fmt::Write;
 use crate::parser::sql::analyse::SQLAnalyse;
 use crate::parser::sql::SQLStatementContext;
 

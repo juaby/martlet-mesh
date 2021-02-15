@@ -15,8 +15,7 @@
 use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident, ReferentialAction};
 use crate::parser::sql::analyse::{display_comma_separated, SQLAnalyse, display_separated};
 
-use std::fmt::Write;
-use std::collections::HashMap;
+// use std::fmt::Write;
 use crate::parser::sql::SQLStatementContext;
 
 pub type SAResult = crate::common::Result<()>;

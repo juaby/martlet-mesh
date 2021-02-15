@@ -12,8 +12,7 @@
 
 use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, With, Offset, OffsetRows, Top};
 
-use std::fmt::Write;
-use std::collections::HashMap;
+// use std::fmt::Write;
 
 pub type SAResult = crate::common::Result<()>;
 

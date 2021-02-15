@@ -28,7 +28,7 @@ impl CommandHandler<MySQLPacketPayload> for ComQueryHandler {
         let cow_sql = String::from_utf8_lossy(command_sql.as_slice());
         let sql = cow_sql.to_string();
         println!("SQL = {}", sql);
-        let mut statement = parser::sql::mysql::parser(sql.as_str());
+        let mut statement = parser::sql::mysql::parser(sql);
         let statement = statement.pop().unwrap();
 
         let x_query_context = ExplainPlanContext::new(cow_sql.as_ref(),

@@ -19,9 +19,8 @@ mod query;
 mod value;
 
 use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, UnaryOperator, FunctionArg, ListAggOnOverflow, Ident, ListAgg};
-use std::fmt::Write;
-use std::collections::HashMap;
-use crate::parser::sql::{SQLStatementContext, SelectStatementContext};
+// use std::fmt::Write;
+use crate::parser::sql::{SQLStatementContext};
 use sqlparser::tokenizer::{Token, Word, Whitespace};
 
 pub type SAResult = crate::common::Result<()>;
@@ -786,7 +785,7 @@ impl SQLAnalyse for Function {
 /// External table's available file format
 impl SQLAnalyse for FileFormat {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        use self::FileFormat::*;
+        // use self::FileFormat::*;
         // f.write_str(match self {
         //     TEXTFILE => "TEXTFILE",
         //     SEQUENCEFILE => "SEQUENCEFILE",
@@ -895,7 +894,7 @@ impl SQLAnalyse for TransactionMode {
 
 impl SQLAnalyse for TransactionAccessMode {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        use TransactionAccessMode::*;
+        // use TransactionAccessMode::*;
         // f.write_str(match self {
         //     ReadOnly => "READ ONLY",
         //     ReadWrite => "READ WRITE",
@@ -906,7 +905,7 @@ impl SQLAnalyse for TransactionAccessMode {
 
 impl SQLAnalyse for TransactionIsolationLevel {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        use TransactionIsolationLevel::*;
+        // use TransactionIsolationLevel::*;
         // f.write_str(match self {
         //     ReadUncommitted => "READ UNCOMMITTED",
         //     ReadCommitted => "READ COMMITTED",
@@ -1133,8 +1132,6 @@ impl SQLAnalyse for Whitespace {
 #[cfg(test)]
 mod tests {
     use crate::parser::sql::mysql::parser;
-    use crate::parser::sql::rewrite::SQLReWrite;
-    use std::collections::HashMap;
     use crate::parser::sql::analyse::SQLAnalyse;
     use crate::parser::sql::SQLStatementContext;
 

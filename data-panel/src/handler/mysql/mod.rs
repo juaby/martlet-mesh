@@ -128,7 +128,7 @@ mod tests {
         sql_stmt.analyse(&mut sql_stmt_ctx).unwrap();
 
         let mut rewrite_sql = String::new();
-        let mut ctx: HashMap<String, String> = HashMap::new();
+        let ctx: HashMap<String, String> = HashMap::new();
         sql_stmt.rewrite(&mut rewrite_sql, &ctx).unwrap();
 
         assert_eq!(sql.to_uppercase(), rewrite_sql.to_uppercase());

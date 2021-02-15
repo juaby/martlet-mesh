@@ -10,7 +10,7 @@ use crate::handler::mysql::explainplan::ExplainPlan;
 pub fn text_query(plan: &ExplainPlan<'_>) -> Option<Vec<Bytes>> {
     let sql = plan.ctx().get_sql();
 
-    let database_url = "mysql://root:root@localhost:8306/test";
+    let database_url = "mysql://root:root@localhost:3306/test";
     let mut conn = Conn::new(database_url).unwrap();
 
     // This query will emit more result sets.
