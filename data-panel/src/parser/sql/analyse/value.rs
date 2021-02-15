@@ -42,24 +42,9 @@ impl SQLAnalyse for Value {
             Value::Boolean(v) => {
                 // write!(f, "{}", v)?
             },
-            Value::Date(v) => {
-                // write!(f, "DATE '")?;
-                escape_single_quote_string(v).analyse(ctx)?;
-                // write!(f, "'")?;
-            },
-            Value::Time(v) => {
-                // write!(f, "TIME '")?;
-                escape_single_quote_string(v).analyse(ctx)?;
-                // write!(f, "'")?;
-            },
-            Value::Timestamp(v) => {
-                // write!(f, "TIMESTAMP '")?;
-                escape_single_quote_string(v).analyse(ctx)?;
-                // write!(f, "'")?;
-            },
             Value::Interval {
                 value,
-                leading_field: DateTimeField::Second,
+                leading_field: Some(DateTimeField::Second),
                 leading_precision: Some(leading_precision),
                 last_field,
                 fractional_seconds_precision: Some(fractional_seconds_precision),
@@ -69,7 +54,12 @@ impl SQLAnalyse for Value {
                 assert!(last_field.is_none());
                 // write!(f, "INTERVAL '")?;
                 escape_single_quote_string(value).analyse(ctx)?;
-                // write!(f, "' SECOND ({}, {})", leading_precision, fractional_seconds_precision)?;
+                // write!(
+                //     f,
+                //     "' SECOND ({}, {})",
+                //     leading_precision,
+                //     fractional_seconds_precision
+                // )?;
             }
             Value::Interval {
                 value,
@@ -81,7 +71,9 @@ impl SQLAnalyse for Value {
                 // write!(f, "INTERVAL '")?;
                 escape_single_quote_string(value).analyse(ctx)?;
                 // write!(f, "' ")?;
-                leading_field.analyse(ctx)?;
+                if let Some(leading_field) = leading_field {
+                    leading_field.analyse(ctx)?;
+                }
                 if let Some(leading_precision) = leading_precision {
                     // write!(f, " ({})", leading_precision)?;
                 }

@@ -41,24 +41,9 @@ impl SQLReWrite for Value {
             Value::Boolean(v) => {
                 write!(f, "{}", v)?
             },
-            Value::Date(v) => {
-                write!(f, "DATE '")?;
-                escape_single_quote_string(v).rewrite(f, ctx)?;
-                write!(f, "'")?;
-            },
-            Value::Time(v) => {
-                write!(f, "TIME '")?;
-                escape_single_quote_string(v).rewrite(f, ctx)?;
-                write!(f, "'")?;
-            },
-            Value::Timestamp(v) => {
-                write!(f, "TIMESTAMP '")?;
-                escape_single_quote_string(v).rewrite(f, ctx)?;
-                write!(f, "'")?;
-            },
             Value::Interval {
                 value,
-                leading_field: DateTimeField::Second,
+                leading_field: Some(DateTimeField::Second),
                 leading_precision: Some(leading_precision),
                 last_field,
                 fractional_seconds_precision: Some(fractional_seconds_precision),
@@ -66,10 +51,7 @@ impl SQLReWrite for Value {
                 // When the leading field is SECOND, the parser guarantees that
                 // the last field is None.
                 assert!(last_field.is_none());
-                write!(
-                    f,
-                    "INTERVAL '"
-                )?;
+                write!(f, "INTERVAL '")?;
                 escape_single_quote_string(value).rewrite(f, ctx)?;
                 write!(
                     f,
@@ -85,16 +67,12 @@ impl SQLReWrite for Value {
                 last_field,
                 fractional_seconds_precision,
             } => {
-                write!(
-                    f,
-                    "INTERVAL '"
-                )?;
+                write!(f, "INTERVAL '")?;
                 escape_single_quote_string(value).rewrite(f, ctx)?;
-                write!(
-                    f,
-                    "' "
-                )?;
-                leading_field.rewrite(f, ctx)?;
+                write!(f, "' ")?;
+                if let Some(leading_field) = leading_field {
+                    leading_field.rewrite(f, ctx)?;
+                }
                 if let Some(leading_precision) = leading_precision {
                     write!(f, " ({})", leading_precision)?;
                 }

@@ -2,8 +2,10 @@ use std::collections::HashMap;
 
 pub mod mysql;
 pub mod postgresql;
+
 pub mod rewrite;
 pub mod analyse;
+pub mod route;
 
 pub enum SQLStatementContext {
     Select(SelectStatementContext),

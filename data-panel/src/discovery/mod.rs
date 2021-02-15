@@ -1,4 +1,4 @@
 pub mod database;
 pub mod rpc;
-pub mod redis;
+pub mod cache;
 pub mod mq;

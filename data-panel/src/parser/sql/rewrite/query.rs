@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query};
+use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, With, Offset, OffsetRows, Top};
 
 use std::fmt::Write;
 use std::collections::HashMap;
@@ -23,10 +23,8 @@ use crate::parser::sql::rewrite::{display_comma_separated, SQLReWrite};
 /// including `WITH`, `UNION` / other set operations, and `ORDER BY`.
 impl SQLReWrite for Query {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        if !self.ctes.is_empty() {
-            write!(f, "WITH ")?;
-            display_comma_separated(&self.ctes).rewrite(f, ctx)?;
-            write!(f, " ")?;
+        if let Some(ref with) = self.with {
+            with.rewrite(f, ctx)?;
         }
         self.body.rewrite(f, ctx)?;
         if !self.order_by.is_empty() {
@@ -38,9 +36,8 @@ impl SQLReWrite for Query {
             limit.rewrite(f, ctx)?;
         }
         if let Some(ref offset) = self.offset {
-            write!(f, " OFFSET ")?;
+            write!(f, " ")?;
             offset.rewrite(f, ctx)?;
-            write!(f, " ROWS")?;
         }
         if let Some(ref fetch) = self.fetch {
             write!(f, " ")?;
@@ -99,15 +96,12 @@ impl SQLReWrite for SetOperator {
 /// to a set operation like `UNION`.
 impl SQLReWrite for Select {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        write!(
-            f,
-            "SELECT"
-        )?;
-        write!(
-            f,
-            "{} ",
-            if self.distinct { " DISTINCT" } else { "" }
-        )?;
+        write!(f, "SELECT{}", if self.distinct { " DISTINCT" } else { "" })?;
+        if let Some(ref top) = self.top {
+            write!(f, " ")?;
+            top.rewrite(f, ctx)?;
+        }
+        write!(f, " ")?;
         display_comma_separated(&self.projection).rewrite(f, ctx)?;
         if !self.from.is_empty() {
             write!(f, " FROM ")?;
@@ -125,6 +119,18 @@ impl SQLReWrite for Select {
             write!(f, " HAVING ")?;
             having.rewrite(f, ctx)?;
         }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for With {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        write!(
+            f,
+            "WITH {}",
+            if self.recursive { "RECURSIVE " } else { "" }
+        )?;
+        display_comma_separated(&self.cte_tables).rewrite(f, ctx)?;
         Ok(())
     }
 }
@@ -152,7 +158,8 @@ impl SQLReWrite for SelectItem {
             },
             SelectItem::ExprWithAlias { expr, alias } => {
                 expr.rewrite(f, ctx)?;
-                write!(f, " AS {}", alias)?;
+                write!(f, " AS ")?;
+                alias.rewrite(f, ctx)?;
             },
             SelectItem::QualifiedWildcard(prefix) => {
                 prefix.rewrite(f, ctx)?;
@@ -220,6 +227,16 @@ impl SQLReWrite for TableFactor {
                 }
                 Ok(())
             }
+            TableFactor::TableFunction { expr, alias } => {
+                write!(f, "TABLE(")?;
+                expr.rewrite(f, ctx)?;
+                write!(f, ")")?;
+                if let Some(alias) = alias {
+                    write!(f, " AS ")?;
+                    alias.rewrite(f, ctx)?;
+                }
+                Ok(())
+            }
             TableFactor::NestedJoin(table_reference) => {
                 write!(f, "(")?;
                 table_reference.rewrite(f, ctx)?;
@@ -232,7 +249,7 @@ impl SQLReWrite for TableFactor {
 
 impl SQLReWrite for TableAlias {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        write!(f, "{}", self.name)?;
+        self.name.rewrite(f, ctx)?;
         if !self.columns.is_empty() {
             write!(f, " (")?;
             display_comma_separated(&self.columns).rewrite(f, ctx)?;
@@ -328,18 +345,36 @@ impl SQLReWrite for Join {
 
 impl SQLReWrite for OrderByExpr {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        self.expr.rewrite(f, ctx)?;
         match self.asc {
-            Some(true) => {
-                self.expr.rewrite(f, ctx)?;
-                write!(f, " ASC")?;
-            },
-            Some(false) => {
-                self.expr.rewrite(f, ctx)?;
-                write!(f, " DESC")?;
-            },
-            None => {
-                self.expr.rewrite(f, ctx)?;
-            },
+            Some(true) => write!(f, " ASC")?,
+            Some(false) => write!(f, " DESC")?,
+            None => (),
+        }
+        match self.nulls_first {
+            Some(true) => write!(f, " NULLS FIRST")?,
+            Some(false) => write!(f, " NULLS LAST")?,
+            None => (),
+        }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for Offset {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        write!(f, "OFFSET ")?;
+        self.value.rewrite(f, ctx)?;
+        self.rows.rewrite(f, ctx)?;
+        Ok(())
+    }
+}
+
+impl SQLReWrite for OffsetRows {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self {
+            OffsetRows::None => write!(f, "")?,
+            OffsetRows::Row => write!(f, " ROW")?,
+            OffsetRows::Rows => write!(f, " ROWS")?,
         }
         Ok(())
     }
@@ -355,6 +390,21 @@ impl SQLReWrite for Fetch {
             write!(f, "{} ROWS {}",  percent, extension)?;
         } else {
             write!(f, "FETCH FIRST ROWS {}", extension)?;
+        }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for Top {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        let extension = if self.with_ties { " WITH TIES" } else { "" };
+        if let Some(ref quantity) = self.quantity {
+            let percent = if self.percent { " PERCENT" } else { "" };
+            write!(f, "TOP (")?;
+            quantity.rewrite(f, ctx)?;
+            write!(f, "){}{}", percent, extension)?;
+        } else {
+            write!(f, "TOP{}", extension)?;
         }
         Ok(())
     }

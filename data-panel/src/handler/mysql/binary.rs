@@ -168,6 +168,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
                         PrepareParamValue::Int(int) => params_value.push(Value::Int(int)),
                         PrepareParamValue::UInt(uint) => params_value.push(Value::UInt(uint)),
                         PrepareParamValue::Float(f) => params_value.push(Value::Float(f)),
+                        PrepareParamValue::Double(f) => params_value.push(Value::Double(f)),
                         PrepareParamValue::Date(year, month, day, hour, minutes, seconds, micro_seconds) => params_value.push(Value::Date(year, month, day, hour, minutes, seconds, micro_seconds)),
                         PrepareParamValue::Time(is_negative, days, hours, minutes, seconds, micro_seconds) => params_value.push(Value::Time(is_negative, days, hours, minutes, seconds, micro_seconds)),
                     }
@@ -240,6 +241,7 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
                                 Value::Int(int) => row_values.push(PrepareParamValue::Int(int)),
                                 Value::UInt(uint) => row_values.push(PrepareParamValue::UInt(uint)),
                                 Value::Float(f) => row_values.push(PrepareParamValue::Float(f)),
+                                Value::Double(f) => row_values.push(PrepareParamValue::Double(f)),
                                 Value::Date(year, month, day, hour, minutes, seconds, micro_seconds) => row_values.push(PrepareParamValue::Date(year, month, day, hour, minutes, seconds, micro_seconds)),
                                 Value::Time(is_negative, days, hours, minutes, seconds, micro_seconds) => row_values.push(PrepareParamValue::Time(is_negative, days, hours, minutes, seconds, micro_seconds)),
                             }

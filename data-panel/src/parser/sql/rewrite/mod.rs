@@ -18,9 +18,10 @@ mod operator;
 mod query;
 mod value;
 
-use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
+use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, Ident, FunctionArg, UnaryOperator, ListAggOnOverflow, ListAgg};
 use std::fmt::Write;
 use std::collections::HashMap;
+use sqlparser::tokenizer::{Token, Word, Whitespace};
 
 pub type SRWResult = crate::common::Result<()>;
 
@@ -65,6 +66,18 @@ where
     DisplaySeparated { slice, sep: ", " }
 }
 
+impl SQLReWrite for Ident {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self.quote_style {
+            Some(q) if q == '"' || q == '\'' || q == '`' => write!(f, "{}{}{}", q, self.value, q)?,
+            Some(q) if q == '[' => write!(f, "[{}]", self.value)?,
+            None => f.write_str(&self.value)?,
+            _ => panic!("unexpected quote style"),
+        }
+        Ok(())
+    }
+}
+
 impl SQLReWrite for ObjectName {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         display_separated(&self.0, ".").rewrite(f, ctx)?;
@@ -88,7 +101,7 @@ impl SQLReWrite for Expr {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
             Expr::Identifier(s) => {
-                f.write_str(s)?;
+                s.rewrite(f, ctx)?;
             },
             Expr::Wildcard => {
                 f.write_str("*")?;
@@ -169,9 +182,14 @@ impl SQLReWrite for Expr {
                 right.rewrite(f, ctx)?;
             },
             Expr::UnaryOp { op, expr } => {
-                op.rewrite(f, ctx)?;
-                write!(f, " ")?;
-                expr.rewrite(f, ctx)?;
+                if op == &UnaryOperator::PGPostfixFactorial {
+                    expr.rewrite(f, ctx)?;
+                    op.rewrite(f, ctx)?;
+                } else {
+                    op.rewrite(f, ctx)?;
+                    write!(f, " ")?;
+                    expr.rewrite(f, ctx)?;
+                }
             },
             Expr::Cast { expr, data_type } => {
                 write!(f, "CAST(")?;
@@ -200,6 +218,12 @@ impl SQLReWrite for Expr {
             Expr::Value(v) => {
                 v.rewrite(f, ctx)?;
             },
+            Expr::TypedString { data_type, value } => {
+                data_type.rewrite(f, ctx)?;
+                write!(f, " '")?;
+                &value::escape_single_quote_string(value).rewrite(f, ctx)?;
+                write!(f, "'")?;
+            }
             Expr::Function(fun) => {
                 fun.rewrite(f, ctx)?;
             },
@@ -236,6 +260,9 @@ impl SQLReWrite for Expr {
                 write!(f, "(")?;
                 s.rewrite(f, ctx)?;
                 write!(f, ")")?;
+            },
+            Expr::ListAgg(listagg) => {
+                listagg.rewrite(f, ctx)?;
             },
         };
         Ok(())
@@ -322,6 +349,27 @@ impl SQLReWrite for Statement {
     #[allow(clippy::cognitive_complexity)]
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
+            Statement::Explain {
+                verbose,
+                analyze,
+                statement,
+            } => {
+                write!(f, "EXPLAIN ")?;
+
+                if *analyze {
+                    write!(f, "ANALYZE ")?;
+                }
+
+                if *verbose {
+                    write!(f, "VERBOSE ")?;
+                }
+
+                statement.rewrite(f, ctx)?;
+            }
+            Statement::Analyze { table_name } => {
+                write!(f, "ANALYZE TABLE ")?;
+                table_name.rewrite(f, ctx)?;
+            },
             Statement::Query(s) => {
                 s.rewrite(f, ctx)?;
             },
@@ -396,32 +444,30 @@ impl SQLReWrite for Statement {
                 }
             }
             Statement::CreateView {
+                or_replace,
                 name,
                 columns,
                 query,
                 materialized,
                 with_options,
             } => {
-                write!(f, "CREATE")?;
-                if *materialized {
-                    write!(f, " MATERIALIZED")?;
-                }
-
-                write!(f, " VIEW ")?;
+                write!(
+                    f,
+                    "CREATE {or_replace}{materialized}VIEW ",
+                    or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    materialized = if *materialized { "MATERIALIZED " } else { "" }
+                )?;
                 name.rewrite(f, ctx)?;
-
                 if !with_options.is_empty() {
                     write!(f, " WITH (")?;
                     display_comma_separated(with_options).rewrite(f, ctx)?;
                     write!(f, ")")?;
                 }
-
                 if !columns.is_empty() {
                     write!(f, " (")?;
                     display_comma_separated(columns).rewrite(f, ctx)?;
                     write!(f, ")")?;
                 }
-
                 write!(f, " AS ")?;
                 query.rewrite(f, ctx)?;
             }
@@ -430,27 +476,45 @@ impl SQLReWrite for Statement {
                 columns,
                 constraints,
                 with_options,
+                or_replace,
+                if_not_exists,
                 external,
                 file_format,
                 location,
+                query,
+                without_rowid,
             } => {
+                // We want to allow the following options
+                // Empty column list, allowed by PostgreSQL:
+                //   `CREATE TABLE t ()`
+                // No columns provided for CREATE TABLE AS:
+                //   `CREATE TABLE t AS SELECT a from t2`
+                // Columns provided for CREATE TABLE AS:
+                //   `CREATE TABLE t (a INT) AS SELECT a from t2`
                 write!(
                     f,
-                    "CREATE {}TABLE ",
-                    if *external { "EXTERNAL " } else { "" }
+                    "CREATE {or_replace}{external}TABLE {if_not_exists}",
+                    or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    external = if *external { "EXTERNAL " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                 )?;
                 name.rewrite(f, ctx)?;
-                write!(
-                    f,
-                    " ("
-                )?;
-                display_comma_separated(columns).rewrite(f, ctx)?;
-                if !constraints.is_empty() {
-                    write!(f, ", ")?;
+                if !columns.is_empty() || !constraints.is_empty() {
+                    write!(f, " (")?;
+                    display_comma_separated(columns).rewrite(f, ctx)?;
+                    if !columns.is_empty() && !constraints.is_empty() {
+                        write!(f, ", ")?;
+                    }
                     display_comma_separated(constraints).rewrite(f, ctx)?;
+                    write!(f, ")")?;
+                } else if query.is_none() {
+                    // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
+                    write!(f, " ()")?;
                 }
-                write!(f, ")")?;
-
+                // Only for SQLite
+                if *without_rowid {
+                    write!(f, " WITHOUT ROWID")?;
+                }
                 if *external {
                     write!(
                         f,
@@ -459,8 +523,12 @@ impl SQLReWrite for Statement {
                     file_format.as_ref().unwrap().rewrite(f, ctx)?;
                     write!(
                         f,
-                        " LOCATION '{}'",
-                        location.as_ref().unwrap()
+                        " LOCATION '"
+                    )?;
+                    location.as_ref().unwrap().rewrite(f, ctx)?;
+                    write!(
+                        f,
+                        "'"
                     )?;
                 }
                 if !with_options.is_empty() {
@@ -468,7 +536,63 @@ impl SQLReWrite for Statement {
                     display_comma_separated(with_options).rewrite(f, ctx)?;
                     write!(f, ")")?;
                 }
+                if let Some(query) = query {
+                    write!(f, " AS ",)?;
+                    query.rewrite(f, ctx)?;
+                }
             }
+            Statement::CreateVirtualTable {
+                name,
+                if_not_exists,
+                module_name,
+                module_args,
+            } => {
+                write!(
+                    f,
+                    "CREATE VIRTUAL TABLE {if_not_exists}",
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" }
+                )?;
+                name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    " USING "
+                )?;
+                module_name.rewrite(f, ctx)?;
+                if !module_args.is_empty() {
+                    write!(f, " (")?;
+                    display_comma_separated(module_args).rewrite(f, ctx)?;
+                    write!(f, ")",)?;
+                }
+            }
+            Statement::CreateIndex {
+                name,
+                table_name,
+                columns,
+                unique,
+                if_not_exists,
+            } => {
+                write!(
+                    f,
+                    "CREATE {unique}INDEX {if_not_exists}",
+                    unique = if *unique { "UNIQUE " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" }
+                )?;
+                name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    " ON "
+                )?;
+                table_name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    "("
+                )?;
+                display_separated(columns, ",").rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
+                )?;
+            },
             Statement::AlterTable { name, operation } => {
                 write!(f, "ALTER TABLE ")?;
                 name.rewrite(f, ctx)?;
@@ -507,11 +631,13 @@ impl SQLReWrite for Statement {
                 if *local {
                     f.write_str("LOCAL ")?;
                 }
-                write!(f, "{} = ", variable)?;
+                variable.rewrite(f, ctx)?;
+                write!(f, " = ")?;
                 value.rewrite(f, ctx)?;
             }
             Statement::ShowVariable { variable } => {
-                write!(f, "SHOW {}", variable)?;
+                write!(f, "SHOW ")?;
+                variable.rewrite(f, ctx)?;
             },
             Statement::ShowColumns {
                 extended,
@@ -519,14 +645,12 @@ impl SQLReWrite for Statement {
                 table_name,
                 filter,
             } => {
-                f.write_str("SHOW ")?;
-                if *extended {
-                    f.write_str("EXTENDED ")?;
-                }
-                if *full {
-                    f.write_str("FULL ")?;
-                }
-                write!(f, "COLUMNS FROM ")?;
+                write!(
+                    f,
+                    "SHOW {extended}{full}COLUMNS FROM ",
+                    extended = if *extended { "EXTENDED " } else { "" },
+                    full = if *full { "FULL " } else { "" }
+                )?;
                 table_name.rewrite(f, ctx)?;
                 if let Some(filter) = filter {
                     write!(f, " ")?;
@@ -553,6 +677,58 @@ impl SQLReWrite for Statement {
             Statement::Rollback { chain } => {
                 write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
             }
+            Statement::CreateSchema {
+                schema_name,
+                if_not_exists,
+            } => {
+                write!(
+                    f,
+                    "CREATE SCHEMA {if_not_exists}",
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                )?;
+                schema_name.rewrite(f, ctx)?;
+            },
+            Statement::Assert { condition, message } => {
+                write!(f, "ASSERT ")?;
+                condition.rewrite(f, ctx)?;
+                if let Some(m) = message {
+                    write!(f, " AS ")?;
+                    m.rewrite(f, ctx)?;
+                }
+            }
+            Statement::Deallocate { name, prepare } => {
+                write!(
+                    f,
+                    "DEALLOCATE {prepare}",
+                    prepare = if *prepare { "PREPARE " } else { "" },
+                )?;
+                name.rewrite(f, ctx)?;
+            },
+            Statement::Execute { name, parameters } => {
+                write!(f, "EXECUTE ")?;
+                name.rewrite(f, ctx)?;
+                if !parameters.is_empty() {
+                    write!(f, "(")?;
+                    display_comma_separated(parameters).rewrite(f, ctx)?;
+                    write!(f, "()",)?;
+                }
+            }
+            Statement::Prepare {
+                name,
+                data_types,
+                statement,
+            } => {
+                write!(f, "PREPARE ")?;
+                name.rewrite(f, ctx)?;
+                write!(f, " ")?;
+                if !data_types.is_empty() {
+                    write!(f, "(")?;
+                    display_comma_separated(data_types).rewrite(f, ctx)?;
+                    write!(f, ") ")?;
+                }
+                write!(f, "AS ")?;
+                statement.rewrite(f, ctx)?;
+            }
         };
         Ok(())
     }
@@ -561,8 +737,25 @@ impl SQLReWrite for Statement {
 /// SQL assignment `foo = expr` as used in SQLUpdate
 impl SQLReWrite for Assignment {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        write!(f, "{} = ", self.id)?;
+        self.id.rewrite(f, ctx)?;
+        write!(f, " = ")?;
         self.value.rewrite(f, ctx)
+    }
+}
+
+impl SQLReWrite for FunctionArg {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self {
+            FunctionArg::Named { name, arg } => {
+                name.rewrite(f, ctx)?;
+                write!(f, " => ")?;
+                arg.rewrite(f, ctx)?;
+            },
+            FunctionArg::Unnamed(unnamed_arg) => {
+                unnamed_arg.rewrite(f, ctx)?;
+            },
+        };
+        Ok(())
     }
 }
 
@@ -606,11 +799,69 @@ impl SQLReWrite for FileFormat {
     }
 }
 
+impl SQLReWrite for ListAgg {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        write!(
+            f,
+            "LISTAGG({}",
+            if self.distinct { "DISTINCT " } else { "" },
+        )?;
+        self.expr.rewrite(f, ctx)?;
+        if let Some(separator) = &self.separator {
+            write!(f, ", ")?;
+            separator.rewrite(f, ctx)?;
+        }
+        if let Some(on_overflow) = &self.on_overflow {
+            on_overflow.rewrite(f, ctx)?;
+        }
+        write!(f, ")")?;
+        if !self.within_group.is_empty() {
+            write!(
+                f,
+                " WITHIN GROUP (ORDER BY "
+            )?;
+            display_comma_separated(&self.within_group).rewrite(f, ctx)?;
+            write!(
+                f,
+                ")"
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for ListAggOnOverflow {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        write!(f, " ON OVERFLOW")?;
+        match self {
+            ListAggOnOverflow::Error => {
+                write!(f, " ERROR")?;
+            },
+            ListAggOnOverflow::Truncate { filler, with_count } => {
+                write!(f, " TRUNCATE")?;
+                if let Some(filler) = filler {
+                    write!(f, " ")?;
+                    filler.rewrite(f, ctx)?;
+                }
+                if *with_count {
+                    write!(f, " WITH")?;
+                } else {
+                    write!(f, " WITHOUT")?;
+                }
+                write!(f, " COUNT")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl SQLReWrite for ObjectType {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         f.write_str(match self {
             ObjectType::Table => "TABLE",
             ObjectType::View => "VIEW",
+            ObjectType::Index => "INDEX",
+            ObjectType::Schema => "SCHEMA",
         })?;
         Ok(())
     }
@@ -618,7 +869,8 @@ impl SQLReWrite for ObjectType {
 
 impl SQLReWrite for SqlOption {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        write!(f, "{} = ", self.name)?;
+        self.name.rewrite(f, ctx)?;
+        write!(f, " = ")?;
         self.value.rewrite(f, ctx)?;
         Ok(())
     }
@@ -687,12 +939,104 @@ impl SQLReWrite for SetVariableValue {
         use SetVariableValue::*;
         match self {
             Ident(ident) => {
-                f.write_str(ident)?;
+                ident.rewrite(f, ctx)?;
             },
             Literal(literal) => {
-                literal.rewrite(f, ctx)?
+                literal.rewrite(f, ctx)?;
             }
         }
+        Ok(())
+    }
+}
+
+impl SQLReWrite for Token {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self {
+            Token::EOF => f.write_str("EOF")?,
+            Token::Word(ref w) => {
+                w.rewrite(f, ctx)?;
+            },
+            Token::Number(ref n) => f.write_str(n)?,
+            Token::Char(ref c) => write!(f, "{}", c)?,
+            Token::SingleQuotedString(ref s) => write!(f, "'{}'", s)?,
+            Token::NationalStringLiteral(ref s) => write!(f, "N'{}'", s)?,
+            Token::HexStringLiteral(ref s) => write!(f, "X'{}'", s)?,
+            Token::Comma => f.write_str(",")?,
+            Token::Whitespace(ws) => {
+                ws.rewrite(f, ctx)?;
+            },
+            Token::Eq => f.write_str("=")?,
+            Token::Neq => f.write_str("<>")?,
+            Token::Lt => f.write_str("<")?,
+            Token::Gt => f.write_str(">")?,
+            Token::LtEq => f.write_str("<=")?,
+            Token::GtEq => f.write_str(">=")?,
+            Token::Plus => f.write_str("+")?,
+            Token::Minus => f.write_str("-")?,
+            Token::Mult => f.write_str("*")?,
+            Token::Div => f.write_str("/")?,
+            Token::StringConcat => f.write_str("||")?,
+            Token::Mod => f.write_str("%")?,
+            Token::LParen => f.write_str("(")?,
+            Token::RParen => f.write_str(")")?,
+            Token::Period => f.write_str(".")?,
+            Token::Colon => f.write_str(":")?,
+            Token::DoubleColon => f.write_str("::")?,
+            Token::SemiColon => f.write_str(";")?,
+            Token::Backslash => f.write_str("\\")?,
+            Token::LBracket => f.write_str("[")?,
+            Token::RBracket => f.write_str("]")?,
+            Token::Ampersand => f.write_str("&")?,
+            Token::Caret => f.write_str("^")?,
+            Token::Pipe => f.write_str("|")?,
+            Token::LBrace => f.write_str("{")?,
+            Token::RBrace => f.write_str("}")?,
+            Token::RArrow => f.write_str("=>")?,
+            Token::Sharp => f.write_str("#")?,
+            Token::ExclamationMark => f.write_str("!")?,
+            Token::DoubleExclamationMark => f.write_str("!!")?,
+            Token::Tilde => f.write_str("~")?,
+            Token::AtSign => f.write_str("@")?,
+            Token::ShiftLeft => f.write_str("<<")?,
+            Token::ShiftRight => f.write_str(">>")?,
+            Token::PGSquareRoot => f.write_str("|/")?,
+            Token::PGCubeRoot => f.write_str("||/")?,
+        };
+        Ok(())
+    }
+}
+
+impl SQLReWrite for Word {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self.quote_style {
+            Some(s) if s == '"' || s == '[' || s == '`' => {
+                write!(f, "{}{}{}", s, self.value, matching_end_quote(s))?
+            }
+            None => f.write_str(&self.value)?,
+            _ => panic!("Unexpected quote_style!"),
+        };
+        Ok(())
+    }
+}
+
+fn matching_end_quote(ch: char) -> char {
+    match ch {
+        '"' => '"', // ANSI and most dialects
+        '[' => ']', // MS SQL
+        '`' => '`', // MySQL
+        _ => panic!("unexpected quoting style!"),
+    }
+}
+
+impl SQLReWrite for Whitespace {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self {
+            Whitespace::Space => f.write_str(" ")?,
+            Whitespace::Newline => f.write_str("\n")?,
+            Whitespace::Tab => f.write_str("\t")?,
+            Whitespace::SingleLineComment { prefix, comment } => write!(f, "{}{}", prefix, comment)?,
+            Whitespace::MultiLineComment(s) => write!(f, "/*{}*/", s)?,
+        };
         Ok(())
     }
 }

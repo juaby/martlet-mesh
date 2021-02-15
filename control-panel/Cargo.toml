@@ -1,5 +1,5 @@
 [package]
-name = "dbmesh-control-panel"
+name = "martlet-mesh-control-panel"
 version = "0.1.0"
 authors = ["AlphaPo <juaby@163.com>"]
 edition = "2018"
@@ -9,23 +9,23 @@ edition = "2018"
 [dependencies]
 clap = "2.33"
 futures = "0.3"
-tokio = { version = "0.2", features = ["full"] }
-tokio-util = { version = "0.2", features = ["full"] }
-byteorder = "1.3.2"
-bytes = "0.5"
-sqlparser = "0.5.0"
-r2d2 = "0.8.6"
-hyper = "0.12.35"
-serde_json = "1.0.41"
-chrono = "0.4.9"
-log = "0.4.8"
-env_logger = "0.7.1"
-mysql = "17.0.0"
+tokio = { version = "1.1", features = ["full"] }
+tokio-util = { version = "0.6", features = ["full"] }
+byteorder = "1.4.2"
+bytes = "1.0"
+sqlparser = "0.7"
+r2d2 = "0.8"
+hyper = "0.14"
+serde_json = "1.0.61"
+chrono = "0.4.19"
+log = "0.4.13"
+env_logger = "0.8.2"
+mysql = "20.1"
 bitflags = "1.2.1"
-r2d2_mysql = "16.0.0"
+r2d2_mysql = "18.0"
 mysqlbinlog = "0.1.5"
-rand = "0.7.3"
-rocket = "0.4.4"
+rand = "0.8.2"
+rocket = "0.4.6"
 
 [build-dependencies]
 cc = "1.0"

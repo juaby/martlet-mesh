@@ -18,10 +18,11 @@ mod operator;
 mod query;
 mod value;
 
-use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName};
+use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, UnaryOperator, FunctionArg, ListAggOnOverflow, Ident, ListAgg};
 use std::fmt::Write;
 use std::collections::HashMap;
 use crate::parser::sql::{SQLStatementContext, SelectStatementContext};
+use sqlparser::tokenizer::{Token, Word, Whitespace};
 
 pub type SAResult = crate::common::Result<()>;
 
@@ -30,16 +31,16 @@ pub trait SQLAnalyse {
 }
 
 struct DisplaySeparated<'a, T>
-where
-    T: SQLAnalyse,
+    where
+        T: SQLAnalyse,
 {
     slice: &'a [T],
     sep: &'static str,
 }
 
 impl<'a, T> SQLAnalyse for DisplaySeparated<'a, T>
-where
-    T: SQLAnalyse,
+    where
+        T: SQLAnalyse,
 {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         let mut delim = "";
@@ -53,17 +54,29 @@ where
 }
 
 fn display_separated<'a, T>(slice: &'a [T], sep: &'static str) -> DisplaySeparated<'a, T>
-where
-    T: SQLAnalyse,
+    where
+        T: SQLAnalyse,
 {
     DisplaySeparated { slice, sep }
 }
 
 fn display_comma_separated<T>(slice: &[T]) -> DisplaySeparated<'_, T>
-where
-    T: SQLAnalyse,
+    where
+        T: SQLAnalyse,
 {
     DisplaySeparated { slice, sep: ", " }
+}
+
+impl SQLAnalyse for Ident {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // match self.quote_style {
+        //     Some(q) if q == '"' || q == '\'' || q == '`' => write!(f, "{}{}{}", q, self.value, q)?,
+        //     Some(q) if q == '[' => write!(f, "[{}]", self.value)?,
+        //     None => f.write_str(&self.value)?,
+        //     _ => panic!("unexpected quote style"),
+        // }
+        Ok(())
+    }
 }
 
 impl SQLAnalyse for ObjectName {
@@ -89,7 +102,7 @@ impl SQLAnalyse for Expr {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             Expr::Identifier(s) => {
-                // f.write_str(s)?;
+                s.analyse(ctx)?;
             },
             Expr::Wildcard => {
                 // f.write_str("*")?;
@@ -114,10 +127,17 @@ impl SQLAnalyse for Expr {
                 list,
                 negated,
             } => {
-                expr.analyse(ctx)?; // TODO
-                // write!(f, " {}IN (", if *negated { "NOT " } else { "" })?;
-                display_comma_separated(list).analyse(ctx)?; // TODO
-                // write!(f, ")")?;
+                expr.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     " {}IN (",
+                //     if *negated { "NOT " } else { "" }
+                // )?;
+                display_comma_separated(list).analyse(ctx)?;
+                // write!(
+                //     f,
+                //     ")"
+                // )?;
             },
             Expr::InSubquery {
                 expr,
@@ -125,9 +145,16 @@ impl SQLAnalyse for Expr {
                 negated,
             } => {
                 expr.analyse(ctx)?;
-                // write!(f, " {}IN (", if *negated { "NOT " } else { "" })?;
+                // write!(
+                //     f,
+                //     " {}IN (",
+                //     if *negated { "NOT " } else { "" }
+                // )?;
                 subquery.analyse(ctx)?;
-                // write!(f, ")")?;
+                // write!(
+                //     f,
+                //     ")"
+                // )?;
             },
             Expr::Between {
                 expr,
@@ -135,23 +162,35 @@ impl SQLAnalyse for Expr {
                 low,
                 high,
             } => {
-                expr.analyse(ctx)?; // TODO
-                // write!(f, " {}BETWEEN ", if *negated { "NOT " } else { "" })?;
-                low.analyse(ctx)?; // TODO
-                // write!(f, " AND ")?;
-                high.analyse(ctx)?; // TODO
+                expr.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     " {}BETWEEN ",
+                //     if *negated { "NOT " } else { "" }
+                // )?;
+                low.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     " AND "
+                // )?;
+                high.analyse(ctx)?;
             },
             Expr::BinaryOp { left, op, right } => {
-                left.analyse(ctx)?; // TODO
+                left.analyse(ctx)?;
                 // write!(f, " ")?;
-                op.analyse(ctx)?; // TODO
-                // write!(f, " ")?;
-                right.analyse(ctx)?; // TODO
-            },
-            Expr::UnaryOp { op, expr } => {
                 op.analyse(ctx)?;
                 // write!(f, " ")?;
-                expr.analyse(ctx)?;
+                right.analyse(ctx)?;
+            },
+            Expr::UnaryOp { op, expr } => {
+                if op == &UnaryOperator::PGPostfixFactorial {
+                    expr.analyse(ctx)?;
+                    op.analyse(ctx)?;
+                } else {
+                    op.analyse(ctx)?;
+                    // write!(f, " ")?;
+                    expr.analyse(ctx)?;
+                }
             },
             Expr::Cast { expr, data_type } => {
                 // write!(f, "CAST(")?;
@@ -180,6 +219,12 @@ impl SQLAnalyse for Expr {
             Expr::Value(v) => {
                 v.analyse(ctx)?;
             },
+            Expr::TypedString { data_type, value } => {
+                data_type.analyse(ctx)?;
+                // write!(f, " '")?;
+                &value::escape_single_quote_string(value).analyse(ctx)?;
+                // write!(f, "'")?;
+            }
             Expr::Function(fun) => {
                 fun.analyse(ctx)?;
             },
@@ -217,6 +262,9 @@ impl SQLAnalyse for Expr {
                 s.analyse(ctx)?;
                 // write!(f, ")")?;
             },
+            Expr::ListAgg(listagg) => {
+                listagg.analyse(ctx)?;
+            },
         };
         Ok(())
     }
@@ -228,7 +276,10 @@ impl SQLAnalyse for WindowSpec {
         let mut delim = "";
         if !self.partition_by.is_empty() {
             delim = " ";
-            // write!(f, "PARTITION BY ")?;
+            // write!(
+            //     f,
+            //     "PARTITION BY "
+            // )?;
             display_comma_separated(&self.partition_by).analyse(ctx)?;
         }
         if !self.order_by.is_empty() {
@@ -241,9 +292,15 @@ impl SQLAnalyse for WindowSpec {
             if let Some(end_bound) = &window_frame.end_bound {
                 // f.write_str(delim)?;
                 window_frame.units.analyse(ctx)?;
-                // write!(f, " BETWEEN ")?;
+                // write!(
+                //     f,
+                //     " BETWEEN "
+                // )?;
                 window_frame.start_bound.analyse(ctx)?;
-                // write!(f, " AND ")?;
+                // write!(
+                //     f,
+                //     " AND "
+                // )?;
                 end_bound.analyse(ctx)?;
             } else {
                 // f.write_str(delim)?;
@@ -293,8 +350,28 @@ impl SQLAnalyse for Statement {
     #[allow(clippy::cognitive_complexity)]
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
+            Statement::Explain {
+                verbose,
+                analyze,
+                statement,
+            } => {
+                // write!(f, "EXPLAIN ")?;
+
+                if *analyze {
+                    // write!(f, "ANALYZE ")?;
+                }
+
+                if *verbose {
+                    // write!(f, "VERBOSE ")?;
+                }
+
+                statement.analyse(ctx)?;
+            }
+            Statement::Analyze { table_name } => {
+                // write!(f, "ANALYZE TABLE ")?;
+                table_name.analyse(ctx)?;
+            },
             Statement::Query(s) => {
-                *ctx = SQLStatementContext::Select(SelectStatementContext::new());
                 s.analyse(ctx)?;
             },
             Statement::Insert {
@@ -303,11 +380,11 @@ impl SQLAnalyse for Statement {
                 source,
             } => {
                 // write!(f, "INSERT INTO ")?;
-                table_name.analyse(ctx)?; // TODO
+                table_name.analyse(ctx)?;
                 // write!(f, " ")?;
                 if !columns.is_empty() {
                     // write!(f, "(")?;
-                    display_comma_separated(columns).analyse(ctx)?; // TODO
+                    display_comma_separated(columns).analyse(ctx)?;
                     // write!(f, ") ")?;
                 }
                 source.analyse(ctx)?;
@@ -346,14 +423,14 @@ impl SQLAnalyse for Statement {
                 selection,
             } => {
                 // write!(f, "UPDATE ")?;
-                table_name.analyse(ctx)?; // TODO
+                table_name.analyse(ctx)?;
                 if !assignments.is_empty() {
                     // write!(f, " SET ")?;
                     display_comma_separated(assignments).analyse(ctx)?;
                 }
                 if let Some(selection) = selection {
                     // write!(f, " WHERE ")?;
-                    selection.analyse(ctx)?; // TODO
+                    selection.analyse(ctx)?;
                 }
             }
             Statement::Delete {
@@ -361,39 +438,37 @@ impl SQLAnalyse for Statement {
                 selection,
             } => {
                 // write!(f, "DELETE FROM ")?;
-                table_name.analyse(ctx)?; // TODO
+                table_name.analyse(ctx)?;
                 if let Some(selection) = selection {
                     // write!(f, " WHERE ")?;
-                    selection.analyse(ctx)?; // TODO
+                    selection.analyse(ctx)?;
                 }
             }
             Statement::CreateView {
+                or_replace,
                 name,
                 columns,
                 query,
                 materialized,
                 with_options,
             } => {
-                // write!(f, "CREATE")?;
-                if *materialized {
-                    // write!(f, " MATERIALIZED")?;
-                }
-
-                // write!(f, " VIEW ")?;
+                // write!(
+                //     f,
+                //     "CREATE {or_replace}{materialized}VIEW ",
+                //     or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                //     materialized = if *materialized { "MATERIALIZED " } else { "" }
+                // )?;
                 name.analyse(ctx)?;
-
                 if !with_options.is_empty() {
                     // write!(f, " WITH (")?;
                     display_comma_separated(with_options).analyse(ctx)?;
                     // write!(f, ")")?;
                 }
-
                 if !columns.is_empty() {
                     // write!(f, " (")?;
                     display_comma_separated(columns).analyse(ctx)?;
                     // write!(f, ")")?;
                 }
-
                 // write!(f, " AS ")?;
                 query.analyse(ctx)?;
             }
@@ -402,31 +477,123 @@ impl SQLAnalyse for Statement {
                 columns,
                 constraints,
                 with_options,
+                or_replace,
+                if_not_exists,
                 external,
                 file_format,
                 location,
+                query,
+                without_rowid,
             } => {
-                // write!(f, "CREATE {}TABLE ", if *external { "EXTERNAL " } else { "" })?;
+                // We want to allow the following options
+                // Empty column list, allowed by PostgreSQL:
+                //   `CREATE TABLE t ()`
+                // No columns provided for CREATE TABLE AS:
+                //   `CREATE TABLE t AS SELECT a from t2`
+                // Columns provided for CREATE TABLE AS:
+                //   `CREATE TABLE t (a INT) AS SELECT a from t2`
+                // write!(
+                //     f,
+                //     "CREATE {or_replace}{external}TABLE {if_not_exists}",
+                //     or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                //     external = if *external { "EXTERNAL " } else { "" },
+                //     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                // )?;
                 name.analyse(ctx)?;
-                // write!(f, " (")?;
-                display_comma_separated(columns).analyse(ctx)?;
-                if !constraints.is_empty() {
-                    // write!(f, ", ")?;
+                if !columns.is_empty() || !constraints.is_empty() {
+                    // write!(f, " (")?;
+                    display_comma_separated(columns).analyse(ctx)?;
+                    if !columns.is_empty() && !constraints.is_empty() {
+                        // write!(f, ", ")?;
+                    }
                     display_comma_separated(constraints).analyse(ctx)?;
+                    // write!(f, ")")?;
+                } else if query.is_none() {
+                    // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
+                    // write!(f, " ()")?;
                 }
-                // write!(f, ")")?;
-
+                // Only for SQLite
+                if *without_rowid {
+                    // write!(f, " WITHOUT ROWID")?;
+                }
                 if *external {
-                    // write!(f, " STORED AS ")?;
+                    // write!(
+                    //     f,
+                    //     " STORED AS "
+                    // )?;
                     file_format.as_ref().unwrap().analyse(ctx)?;
-                    // write!(f, " LOCATION '{}'", location.as_ref().unwrap())?;
+                    // write!(
+                    //     f,
+                    //     " LOCATION '"
+                    // )?;
+                    location.as_ref().unwrap().analyse(ctx)?;
+                    // write!(
+                    //     f,
+                    //     "'"
+                    // )?;
                 }
                 if !with_options.is_empty() {
                     // write!(f, " WITH (")?;
                     display_comma_separated(with_options).analyse(ctx)?;
                     // write!(f, ")")?;
                 }
+                if let Some(query) = query {
+                    // write!(f, " AS ",)?;
+                    query.analyse(ctx)?;
+                }
             }
+            Statement::CreateVirtualTable {
+                name,
+                if_not_exists,
+                module_name,
+                module_args,
+            } => {
+                // write!(
+                //     f,
+                //     "CREATE VIRTUAL TABLE {if_not_exists}",
+                //     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" }
+                // )?;
+                name.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     " USING "
+                // )?;
+                module_name.analyse(ctx)?;
+                if !module_args.is_empty() {
+                    // write!(f, " (")?;
+                    display_comma_separated(module_args).analyse(ctx)?;
+                    // write!(f, ")",)?;
+                }
+            }
+            Statement::CreateIndex {
+                name,
+                table_name,
+                columns,
+                unique,
+                if_not_exists,
+            } => {
+                // write!(
+                //     f,
+                //     "CREATE {unique}INDEX {if_not_exists}",
+                //     unique = if *unique { "UNIQUE " } else { "" },
+                //     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" }
+                // )?;
+                name.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     " ON "
+                // )?;
+                table_name.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     "("
+                // )?;
+                display_separated(columns, ",").analyse(ctx)?;
+                // write!(
+                //     f,
+                //     ")"
+                // )?;
+            },
             Statement::AlterTable { name, operation } => {
                 // write!(f, "ALTER TABLE ")?;
                 name.analyse(ctx)?;
@@ -439,11 +606,22 @@ impl SQLAnalyse for Statement {
                 names,
                 cascade,
             } => {
-                // write!(f, "DROP ")?;
+                // write!(
+                //     f,
+                //     "DROP "
+                // )?;
                 object_type.analyse(ctx)?;
-                // write!(f, "{} ", if *if_exists { " IF EXISTS" } else { "" })?;
+                // write!(
+                //     f,
+                //     "{} ",
+                //     if *if_exists { " IF EXISTS" } else { "" }
+                // )?;
                 display_comma_separated(names).analyse(ctx)?;
-                // write!(f, "{}", if *cascade { " CASCADE" } else { "" })?;
+                // write!(
+                //     f,
+                //     "{}",
+                //     if *cascade { " CASCADE" } else { "" }
+                // )?;
             },
             Statement::SetVariable {
                 local,
@@ -454,11 +632,13 @@ impl SQLAnalyse for Statement {
                 if *local {
                     // f.write_str("LOCAL ")?;
                 }
-                // write!(f, "{} = ", variable)?;
+                variable.analyse(ctx)?;
+                // write!(f, " = ")?;
                 value.analyse(ctx)?;
             }
             Statement::ShowVariable { variable } => {
-                // write!(f, "SHOW {}", variable)?;
+                // write!(f, "SHOW ")?;
+                variable.analyse(ctx)?;
             },
             Statement::ShowColumns {
                 extended,
@@ -466,14 +646,12 @@ impl SQLAnalyse for Statement {
                 table_name,
                 filter,
             } => {
-                // f.write_str("SHOW ")?;
-                if *extended {
-                    // f.write_str("EXTENDED ")?;
-                }
-                if *full {
-                    // f.write_str("FULL ")?;
-                }
-                // write!(f, "COLUMNS FROM ")?;
+                // write!(
+                //     f,
+                //     "SHOW {extended}{full}COLUMNS FROM ",
+                //     extended = if *extended { "EXTENDED " } else { "" },
+                //     full = if *full { "FULL " } else { "" }
+                // )?;
                 table_name.analyse(ctx)?;
                 if let Some(filter) = filter {
                     // write!(f, " ")?;
@@ -500,6 +678,58 @@ impl SQLAnalyse for Statement {
             Statement::Rollback { chain } => {
                 // write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
             }
+            Statement::CreateSchema {
+                schema_name,
+                if_not_exists,
+            } => {
+                // write!(
+                //     f,
+                //     "CREATE SCHEMA {if_not_exists}",
+                //     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                // )?;
+                schema_name.analyse(ctx)?;
+            },
+            Statement::Assert { condition, message } => {
+                // write!(f, "ASSERT ")?;
+                condition.analyse(ctx)?;
+                if let Some(m) = message {
+                    // write!(f, " AS ")?;
+                    m.analyse(ctx)?;
+                }
+            }
+            Statement::Deallocate { name, prepare } => {
+                // write!(
+                //     f,
+                //     "DEALLOCATE {prepare}",
+                //     prepare = if *prepare { "PREPARE " } else { "" },
+                // )?;
+                name.analyse(ctx)?;
+            },
+            Statement::Execute { name, parameters } => {
+                // write!(f, "EXECUTE ")?;
+                name.analyse(ctx)?;
+                if !parameters.is_empty() {
+                    // write!(f, "(")?;
+                    display_comma_separated(parameters).analyse(ctx)?;
+                    // write!(f, "()",)?;
+                }
+            }
+            Statement::Prepare {
+                name,
+                data_types,
+                statement,
+            } => {
+                // write!(f, "PREPARE ")?;
+                name.analyse(ctx)?;
+                // write!(f, " ")?;
+                if !data_types.is_empty() {
+                    // write!(f, "(")?;
+                    display_comma_separated(data_types).analyse(ctx)?;
+                    // write!(f, ") ")?;
+                }
+                // write!(f, "AS ")?;
+                statement.analyse(ctx)?;
+            }
         };
         Ok(())
     }
@@ -508,8 +738,25 @@ impl SQLAnalyse for Statement {
 /// SQL assignment `foo = expr` as used in SQLUpdate
 impl SQLAnalyse for Assignment {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        // write!(f, "{} = ", self.id)?;
+        self.id.analyse(ctx)?;
+        // write!(f, " = ")?;
         self.value.analyse(ctx)
+    }
+}
+
+impl SQLAnalyse for FunctionArg {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        match self {
+            FunctionArg::Named { name, arg } => {
+                name.analyse(ctx)?;
+                // write!(f, " => ")?;
+                arg.analyse(ctx)?;
+            },
+            FunctionArg::Unnamed(unnamed_arg) => {
+                unnamed_arg.analyse(ctx)?;
+            },
+        };
+        Ok(())
     }
 }
 
@@ -517,9 +764,16 @@ impl SQLAnalyse for Assignment {
 impl SQLAnalyse for Function {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         self.name.analyse(ctx)?;
-        // write!(f, "({}", if self.distinct { "DISTINCT " } else { "" })?;
+        // write!(
+        //     f,
+        //     "({}",
+        //     if self.distinct { "DISTINCT " } else { "" }
+        // )?;
         display_comma_separated(&self.args).analyse(ctx)?;
-        // write!(f, ")")?;
+        // write!(
+        //     f,
+        //     ")"
+        // )?;
         if let Some(o) = &self.over {
             // write!(f, " OVER (")?;
             o.analyse(ctx)?;
@@ -546,11 +800,69 @@ impl SQLAnalyse for FileFormat {
     }
 }
 
+impl SQLAnalyse for ListAgg {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(
+        //     f,
+        //     "LISTAGG({}",
+        //     if self.distinct { "DISTINCT " } else { "" },
+        // )?;
+        self.expr.analyse(ctx)?;
+        if let Some(separator) = &self.separator {
+            // write!(f, ", ")?;
+            separator.analyse(ctx)?;
+        }
+        if let Some(on_overflow) = &self.on_overflow {
+            on_overflow.analyse(ctx)?;
+        }
+        // write!(f, ")")?;
+        if !self.within_group.is_empty() {
+            // write!(
+            //     f,
+            //     " WITHIN GROUP (ORDER BY "
+            // )?;
+            display_comma_separated(&self.within_group).analyse(ctx)?;
+            // write!(
+            //     f,
+            //     ")"
+            // )?;
+        }
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for ListAggOnOverflow {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, " ON OVERFLOW")?;
+        match self {
+            ListAggOnOverflow::Error => {
+                // write!(f, " ERROR")?;
+            },
+            ListAggOnOverflow::Truncate { filler, with_count } => {
+                // write!(f, " TRUNCATE")?;
+                if let Some(filler) = filler {
+                    // write!(f, " ")?;
+                    filler.analyse(ctx)?;
+                }
+                if *with_count {
+                    // write!(f, " WITH")?;
+                } else {
+                    // write!(f, " WITHOUT")?;
+                }
+                // write!(f, " COUNT")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl SQLAnalyse for ObjectType {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         // f.write_str(match self {
         //     ObjectType::Table => "TABLE",
         //     ObjectType::View => "VIEW",
+        //     ObjectType::Index => "INDEX",
+        //     ObjectType::Schema => "SCHEMA",
         // })?;
         Ok(())
     }
@@ -558,7 +870,8 @@ impl SQLAnalyse for ObjectType {
 
 impl SQLAnalyse for SqlOption {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        // write!(f, "{} = ", self.name)?;
+        self.name.analyse(ctx)?;
+        // write!(f, " = ")?;
         self.value.analyse(ctx)?;
         Ok(())
     }
@@ -627,12 +940,192 @@ impl SQLAnalyse for SetVariableValue {
         use SetVariableValue::*;
         match self {
             Ident(ident) => {
-                // f.write_str(ident)?;
+                ident.analyse(ctx)?;
             },
             Literal(literal) => {
-                literal.analyse(ctx)?
+                literal.analyse(ctx)?;
             }
         }
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for Token {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        match self {
+            Token::EOF => {
+                // f.write_str("EOF")?
+            },
+            Token::Word(ref w) => {
+                w.analyse(ctx)?;
+            },
+            Token::Number(ref n) => {
+                // f.write_str(n)?
+            },
+            Token::Char(ref c) => {
+                // write!(f, "{}", c)?
+            },
+            Token::SingleQuotedString(ref s) => {
+                // write!(f, "'{}'", s)?
+            },
+            Token::NationalStringLiteral(ref s) => {
+                // write!(f, "N'{}'", s)?
+            },
+            Token::HexStringLiteral(ref s) => {
+                // write!(f, "X'{}'", s)?
+            },
+            Token::Comma => {
+                // f.write_str(",")?
+            },
+            Token::Whitespace(ws) => {
+                ws.analyse(ctx)?;
+            },
+            Token::Eq => {
+                // f.write_str("=")?
+            },
+            Token::Neq => {
+                // f.write_str("<>")?
+            },
+            Token::Lt => {
+                // f.write_str("<")?
+            },
+            Token::Gt => {
+                // f.write_str(">")?
+            },
+            Token::LtEq => {
+                // f.write_str("<=")?
+            },
+            Token::GtEq => {
+                // f.write_str(">=")?
+            },
+            Token::Plus => {
+                // f.write_str("+")?
+            },
+            Token::Minus => {
+                // f.write_str("-")?
+            },
+            Token::Mult => {
+                // f.write_str("*")?
+            },
+            Token::Div => {
+                // f.write_str("/")?
+            },
+            Token::StringConcat => {
+                // f.write_str("||")?
+            },
+            Token::Mod => {
+                // f.write_str("%")?
+            },
+            Token::LParen => {
+                // f.write_str("(")?
+            },
+            Token::RParen => {
+                // f.write_str(")")?
+            },
+            Token::Period => {
+                // f.write_str(".")?
+            },
+            Token::Colon => {
+                // f.write_str(":")?
+            },
+            Token::DoubleColon => {
+                // f.write_str("::")?
+            },
+            Token::SemiColon => {
+                // f.write_str(";")?
+            },
+            Token::Backslash => {
+                // f.write_str("\\")?
+            },
+            Token::LBracket => {
+                // f.write_str("[")?
+            },
+            Token::RBracket => {
+                // f.write_str("]")?
+            },
+            Token::Ampersand => {
+                // f.write_str("&")?
+            },
+            Token::Caret => {
+                // f.write_str("^")?
+            },
+            Token::Pipe => {
+                // f.write_str("|")?
+            },
+            Token::LBrace => {
+                // f.write_str("{")?
+            },
+            Token::RBrace => {
+                // f.write_str("}")?
+            },
+            Token::RArrow => {
+                // f.write_str("=>")?
+            },
+            Token::Sharp => {
+                // f.write_str("#")?
+            },
+            Token::ExclamationMark => {
+                // f.write_str("!")?
+            },
+            Token::DoubleExclamationMark => {
+                // f.write_str("!!")?
+            },
+            Token::Tilde => {
+                // f.write_str("~")?
+            },
+            Token::AtSign => {
+                // f.write_str("@")?
+            },
+            Token::ShiftLeft => {
+                // f.write_str("<<")?
+            },
+            Token::ShiftRight => {
+                // f.write_str(">>")?
+            },
+            Token::PGSquareRoot => {
+                // f.write_str("|/")?
+            },
+            Token::PGCubeRoot => {
+                // f.write_str("||/")?
+            },
+        };
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for Word {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        match self.quote_style {
+            Some(s) if s == '"' || s == '[' || s == '`' => {
+                // write!(f, "{}{}{}", s, self.value, matching_end_quote(s))?
+            }
+            None => {
+                // f.write_str(&self.value)?
+            },
+            _ => panic!("Unexpected quote_style!"),
+        };
+        Ok(())
+    }
+}
+
+fn matching_end_quote(ch: char) -> char {
+    match ch {
+        '"' => '"', // ANSI and most dialects
+        '[' => ']', // MS SQL
+        '`' => '`', // MySQL
+        _ => panic!("unexpected quoting style!"),
+    }
+}
+
+impl SQLAnalyse for Whitespace {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // match self {
+        //     Whitespace::Space => f.write_str(" ")?,
+        //     Whitespace::Newline => f.write_str("\n")?,
+        //     Whitespace::Tab => f.write_str("\t")?,
+        //     Whitespace::SingleLineComment { prefix, comment } => write!(f, "{}{}", prefix, comment)?,
+        //     Whitespace::MultiLineComment(s) => write!(f, "/*{}*/", s)?,
+        // };
         Ok(())
     }
 }

@@ -17,7 +17,7 @@ const SEQUENCE_LENGTH: u32 = 1;
 pub fn generate_random_bytes(len: u32, seed: &mut Vec<u8>) -> Vec<u8> {
     let mut random = rand::thread_rng();
     for _i in 0..len {
-        seed.push(SEED[random.gen_range(0, SEED.len())]);
+        seed.push(SEED[random.gen_range(0..SEED.len())]);
     }
     seed.to_vec()
 }
@@ -103,6 +103,10 @@ impl MySQLPacketPayload {
         self.bytes_mut.put_i64_le(val);
     }
 
+    pub fn put_f32_le(&mut self, val: f32) {
+        self.bytes_mut.put_f32_le(val);
+    }
+
     pub fn put_f64_le(&mut self, val: f64) {
         self.bytes_mut.put_f64_le(val);
     }
@@ -146,7 +150,7 @@ impl MySQLPacketPayload {
 
     // string with nul
     pub fn get_string_nul(&mut self) -> String {
-        let pos = match self.bytes_mut.bytes().iter().position(|&x| x == 0) {
+        let pos = match self.bytes_mut.to_vec().iter().position(|&x| x == 0) {
             Some(pos) => pos,
             None => 0 // TODO
         };
@@ -154,7 +158,7 @@ impl MySQLPacketPayload {
             "".to_string()
         } else {
             let bytes = self.bytes_mut.split_to(pos);
-            let result = String::from_utf8_lossy(bytes.bytes()).to_string();
+            let result = String::from_utf8_lossy(bytes.to_vec().as_slice()).to_string();
             self.bytes_mut.advance(1);
             result
         }
@@ -250,14 +254,13 @@ impl MySQLPacketPayload {
     }
 
     pub fn get_remaining_bytes(&mut self) -> Vec<u8> {
-        let tmp = self.bytes_mut.bytes();
-        tmp.to_vec()
+        self.bytes_mut.to_vec()
     }
 }
 
 impl PacketPayload for MySQLPacketPayload {
     fn get_payload(&mut self) -> Bytes {
-        self.bytes_mut.to_bytes()
+        self.bytes_mut.copy_to_bytes(self.bytes_mut.len())
     }
 }
 

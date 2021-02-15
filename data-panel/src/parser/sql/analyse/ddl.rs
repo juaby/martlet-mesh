@@ -12,8 +12,8 @@
 
 //! AST types specific to CREATE/ALTER variants of [Statement]
 //! (commonly referred to as Data Definition Language, or DDL)
-use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident};
-use crate::parser::sql::analyse::{display_comma_separated, SQLAnalyse};
+use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident, ReferentialAction};
+use crate::parser::sql::analyse::{display_comma_separated, SQLAnalyse, display_separated};
 
 use std::fmt::Write;
 use std::collections::HashMap;
@@ -29,9 +29,50 @@ impl SQLAnalyse for AlterTableOperation {
                 // write!(f, "ADD ")?;
                 c.analyse(ctx)?;
             },
+            AlterTableOperation::AddColumn { column_def } => {
+                // write!(f, "ADD COLUMN ")?;
+                column_def.analyse(ctx)?;
+            }
             AlterTableOperation::DropConstraint { name } => {
-                // write!(f, "DROP CONSTRAINT {}", name)?;
+                // write!(f, "DROP CONSTRAINT ")?;
+                name.analyse(ctx)?;
             },
+            AlterTableOperation::DropColumn {
+                column_name,
+                if_exists,
+                cascade,
+            } => {
+                // write!(
+                //     f,
+                //     "DROP COLUMN {}",
+                //     if *if_exists { "IF EXISTS " } else { "" }
+                // )?;
+                column_name.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     "{}",
+                //     if *cascade { " CASCADE" } else { "" }
+                // )?;
+            },
+            AlterTableOperation::RenameColumn {
+                old_column_name,
+                new_column_name,
+            } => {
+                // write!(
+                //     f,
+                //     "RENAME COLUMN "
+                // )?;
+                old_column_name.analyse(ctx)?;
+                // write!(
+                //     f,
+                //     " TO "
+                // )?;
+                new_column_name.analyse(ctx)?;
+            },
+            AlterTableOperation::RenameTable { table_name } => {
+                // write!(f, "RENAME TO ")?;
+                table_name.analyse(ctx)?;
+            }
         };
         Ok(())
     }
@@ -48,9 +89,16 @@ impl SQLAnalyse for TableConstraint {
                 is_primary,
             } => {
                 display_constraint_name(name).analyse(ctx)?;
-                // write!(f, "{} (", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
+                // write!(
+                //     f,
+                //     "{} (",
+                //     if *is_primary { "PRIMARY KEY" } else { "UNIQUE" }
+                // )?;
                 display_comma_separated(columns).analyse(ctx)?;
-                // write!(f, ")")?;
+                // write!(
+                //     f,
+                //     ")"
+                // )?;
             },
             TableConstraint::ForeignKey {
                 name,
@@ -59,13 +107,25 @@ impl SQLAnalyse for TableConstraint {
                 referred_columns,
             } => {
                 display_constraint_name(name).analyse(ctx)?;
-                // write!(f, "FOREIGN KEY (")?;
+                // write!(
+                //     f,
+                //     "FOREIGN KEY ("
+                // )?;
                 display_comma_separated(columns).analyse(ctx)?;
-                // write!(f, ") REFERENCES ")?;
+                // write!(
+                //     f,
+                //     ") REFERENCES "
+                // )?;
                 foreign_table.analyse(ctx)?;
-                // write!(f, "(")?;
+                // write!(
+                //     f,
+                //     "("
+                // )?;
                 display_comma_separated(referred_columns).analyse(ctx)?;
-                // write!(f, ")")?;
+                // write!(
+                //     f,
+                //     ")"
+                // )?;
             },
             TableConstraint::Check { name, expr } => {
                 display_constraint_name(name).analyse(ctx)?;
@@ -81,7 +141,8 @@ impl SQLAnalyse for TableConstraint {
 /// SQL column definition
 impl SQLAnalyse for ColumnDef {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        // write!(f, "{} ", self.name)?;
+        self.name.analyse(ctx)?;
+        // write!(f, " ")?;
         self.data_type.analyse(ctx)?;
         for option in &self.options {
             // write!(f, " ")?;
@@ -137,17 +198,41 @@ impl SQLAnalyse for ColumnOption {
             ForeignKey {
                 foreign_table,
                 referred_columns,
+                on_delete,
+                on_update,
             } => {
-                // write!(f, "REFERENCES ")?;
+                // write!(
+                //     f,
+                //     "REFERENCES "
+                // )?;
                 foreign_table.analyse(ctx)?;
-                // write!(f, " (")?;
-                display_comma_separated(referred_columns).analyse(ctx)?;
-                // write!(f, ")")?;
+                if !referred_columns.is_empty() {
+                    // write!(
+                    //     f,
+                    //     " ("
+                    // )?;
+                    display_comma_separated(referred_columns).analyse(ctx)?;
+                    // write!(
+                    //     f,
+                    //     ")"
+                    // )?;
+                }
+                if let Some(action) = on_delete {
+                    // write!(f, " ON DELETE ")?;
+                    action.analyse(ctx)?;
+                }
+                if let Some(action) = on_update {
+                    // write!(f, " ON UPDATE ")?;
+                    action.analyse(ctx)?;
+                }
             },
             Check(expr) => {
                 // write!(f, "CHECK (")?;
                 expr.analyse(ctx)?;
                 // write!(f, ")")?;
+            },
+            DialectSpecific(val) => {
+                display_separated(val, " ").analyse(ctx)?;
             },
         };
         Ok(())
@@ -165,4 +250,17 @@ fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl SQLAnalyse + 'a 
         }
     }
     ConstraintName(name)
+}
+
+impl SQLAnalyse for ReferentialAction {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // f.write_str(match self {
+        //     ReferentialAction::Restrict => "RESTRICT",
+        //     ReferentialAction::Cascade => "CASCADE",
+        //     ReferentialAction::SetNull => "SET NULL",
+        //     ReferentialAction::NoAction => "NO ACTION",
+        //     ReferentialAction::SetDefault => "SET DEFAULT",
+        // })?;
+        Ok(())
+    }
 }

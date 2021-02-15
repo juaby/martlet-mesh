@@ -3,56 +3,62 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct RouteContext<'a> {
-    cluster_name: Cow<'a, str>,
-    segments: Segments<'a>,
-    dis_rules: DisRules<'a>
+pub struct RouteRules {
+    cluster_name: String,
+    segments: Segments,
+    dis_rules: DisRules
+}
+
+impl RouteRules {
+    pub fn get_cluster_name(&self) -> &String {
+        &self.cluster_name
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Segments<'a> {
-    meta_segment: MetaSegment<'a>,
-    data_segments: HashMap<u32, DataSegment<'a>>,
+pub struct Segments {
+    meta_segment: MetaSegment,
+    data_segments: HashMap<u32, DataSegment>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct MetaSegment<'a> {
-    primary: Segment<'a>,
-    mirrors: Vec<Segment<'a>>
+pub struct MetaSegment {
+    primary: Segment,
+    mirrors: Vec<Segment>
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct DataSegment<'a> {
-    primary: Segment<'a>,
-    mirrors: Vec<Segment<'a>>
+pub struct DataSegment {
+    primary: Segment,
+    mirrors: Vec<Segment>
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Segment<'a> {
+pub struct Segment {
     id: u32,
-    url: Cow<'a, str>,
-    username: Cow<'a, str>,
-    password:Cow<'a, str>
+    url: String,
+    username: String,
+    password: String
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct DisRules<'a> {
-    distributed_rules: HashMap<Cow<'a, str>, DisTableInfo<'a>>,
-    replicated_tables: Vec<Cow<'a, str>>
+pub struct DisRules {
+    distributed_rules: HashMap<String, DisTable>,
+    replicated_tables: Vec<String>
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct DisTableInfo<'a> {
-    dis_keys: Vec<Cow<'a, str>>,
-    dis_rels: Vec<Cow<'a, str>>,
-    dis_algorithm: DisAlgorithm<'a>,
-    dis_rel_to: Cow<'a, str>,
+pub struct DisTable {
+    dis_keys: Vec<String>,
+    dis_rels: Vec<String>,
+    dis_algorithm: DisAlgorithm,
+    dis_rel_to: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct DisAlgorithm<'a> {
+pub struct DisAlgorithm {
     dis_type: DisType,
-    dis_expression: Cow<'a, str>
+    dis_expression: String
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -63,7 +69,7 @@ pub enum DisType {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use crate::discovery::database::{RouteContext, Segments, DisRules, MetaSegment, Segment, DataSegment, DisTableInfo, DisAlgorithm, DisType};
+    use crate::discovery::database::{RouteRules, Segments, DisRules, MetaSegment, Segment, DataSegment, DisTable, DisAlgorithm, DisType};
     use std::borrow::Cow;
     use std::fs::File;
     use std::io::Read;
@@ -100,7 +106,7 @@ mod tests {
             .expect("Unable to read file");
 
         println!("{}", contents);
-        let deserialized_rc: RouteContext = serde_yaml::from_str(&contents).unwrap();
+        let deserialized_rc: RouteRules = serde_yaml::from_str(&contents).unwrap();
         println!("{:#?}", deserialized_rc);
     }
 
@@ -110,110 +116,110 @@ mod tests {
         data_segments.insert(100, DataSegment {
             primary: Segment {
                 id: 0,
-                url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                username: Cow::from("root"),
-                password: Cow::from("root")
+                url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                username: String::from("root"),
+                password: String::from("root")
             },
             mirrors: vec![
                 Segment {
                     id: 0,
-                    url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                    username: Cow::from("root"),
-                    password: Cow::from("root")
+                    url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                    username: String::from("root"),
+                    password: String::from("root")
                 },
                 Segment {
                     id: 0,
-                    url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                    username: Cow::from("root"),
-                    password: Cow::from("root")
+                    url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                    username: String::from("root"),
+                    password: String::from("root")
                 }
             ]
         });
         data_segments.insert(200, DataSegment {
             primary: Segment {
                 id: 0,
-                url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                username: Cow::from("root"),
-                password: Cow::from("root")
+                url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                username: String::from("root"),
+                password: String::from("root")
             },
             mirrors: vec![
                 Segment {
                     id: 0,
-                    url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                    username: Cow::from("root"),
-                    password: Cow::from("root")
+                    url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                    username: String::from("root"),
+                    password: String::from("root")
                 },
                 Segment {
                     id: 0,
-                    url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                    username: Cow::from("root"),
-                    password: Cow::from("root")
+                    url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                    username: String::from("root"),
+                    password: String::from("root")
                 }
             ]
         });
         data_segments.insert(300, DataSegment {
             primary: Segment {
                 id: 0,
-                url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                username: Cow::from("root"),
-                password: Cow::from("root")
+                url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                username: String::from("root"),
+                password: String::from("root")
             },
             mirrors: vec![
                 Segment {
                     id: 0,
-                    url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                    username: Cow::from("root"),
-                    password: Cow::from("root")
+                    url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                    username: String::from("root"),
+                    password: String::from("root")
                 },
                 Segment {
                     id: 0,
-                    url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                    username: Cow::from("root"),
-                    password: Cow::from("root")
+                    url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                    username: String::from("root"),
+                    password: String::from("root")
                 }
             ]
         });
         let mut distributed_rules = HashMap::new();
-        distributed_rules.insert(Cow::from("t_order"), DisTableInfo {
-            dis_keys: vec![Cow::from("user_id")],
-            dis_rels: vec![Cow::from("t_order_item")],
+        distributed_rules.insert(String::from("t_order"), DisTable {
+            dis_keys: vec![String::from("user_id")],
+            dis_rels: vec![String::from("t_order_item")],
             dis_algorithm: DisAlgorithm {
                 dis_type: DisType::HASH,
-                dis_expression: Cow::from("x + y / 3")
+                dis_expression: String::from("x + y / 3")
             },
-            dis_rel_to: Cow::from("")
+            dis_rel_to: String::from("")
         });
-        distributed_rules.insert(Cow::from("t_order_item"), DisTableInfo {
+        distributed_rules.insert(String::from("t_order_item"), DisTable {
             dis_keys: vec![],
             dis_rels: vec![],
             dis_algorithm: DisAlgorithm {
                 dis_type: DisType::HASH,
-                dis_expression: Cow::from("x + y / 3")
+                dis_expression: String::from("x + y / 3")
             },
-            dis_rel_to: Cow::from("t_order")
+            dis_rel_to: String::from("t_order")
         });
-        let rc = RouteContext {
-            cluster_name: Cow::from("martlet"),
+        let rc = RouteRules {
+            cluster_name: String::from("martlet"),
             segments: Segments {
                 meta_segment: MetaSegment {
                     primary: Segment {
                         id: 0,
-                        url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                        username: Cow::from("root"),
-                        password: Cow::from("root")
+                        url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                        username: String::from("root"),
+                        password: String::from("root")
                     },
                     mirrors: vec![
                         Segment {
                             id: 0,
-                            url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                            username: Cow::from("root"),
-                            password: Cow::from("root")
+                            url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                            username: String::from("root"),
+                            password: String::from("root")
                         },
                         Segment {
                             id: 0,
-                            url: Cow::from("jdbc:mysql://localhost:3306/martlet"),
-                            username: Cow::from("root"),
-                            password: Cow::from("root")
+                            url: String::from("jdbc:mysql://localhost:3306/martlet"),
+                            username: String::from("root"),
+                            password: String::from("root")
                         }
                     ]
                 },
@@ -221,12 +227,12 @@ mod tests {
             },
             dis_rules: DisRules {
                 distributed_rules: distributed_rules,
-                replicated_tables: vec![Cow::from("t_dept"), Cow::from("t_root")]
+                replicated_tables: vec![String::from("t_dept"), String::from("t_root")]
             }
         };
         let s = serde_yaml::to_string(&rc).unwrap();
         println!("{}", s);
-        let deserialized_rc: RouteContext = serde_yaml::from_str(&s).unwrap();
+        let deserialized_rc: RouteRules = serde_yaml::from_str(&s).unwrap();
         println!("{:#?}", deserialized_rc);
     }
 }

@@ -25,6 +25,12 @@ impl SQLReWrite for UnaryOperator {
             UnaryOperator::Plus => "+",
             UnaryOperator::Minus => "-",
             UnaryOperator::Not => "NOT",
+            UnaryOperator::PGBitwiseNot => "~",
+            UnaryOperator::PGSquareRoot => "|/",
+            UnaryOperator::PGCubeRoot => "||/",
+            UnaryOperator::PGPostfixFactorial => "!",
+            UnaryOperator::PGPrefixFactorial => "!!",
+            UnaryOperator::PGAbs => "@",
         })?;
         Ok(())
     }
@@ -39,6 +45,7 @@ impl SQLReWrite for BinaryOperator {
             BinaryOperator::Multiply => "*",
             BinaryOperator::Divide => "/",
             BinaryOperator::Modulus => "%",
+            BinaryOperator::StringConcat => "||",
             BinaryOperator::Gt => ">",
             BinaryOperator::Lt => "<",
             BinaryOperator::GtEq => ">=",
@@ -49,6 +56,12 @@ impl SQLReWrite for BinaryOperator {
             BinaryOperator::Or => "OR",
             BinaryOperator::Like => "LIKE",
             BinaryOperator::NotLike => "NOT LIKE",
+            BinaryOperator::BitwiseOr => "|",
+            BinaryOperator::BitwiseAnd => "&",
+            BinaryOperator::BitwiseXor => "^",
+            BinaryOperator::PGBitwiseXor => "#",
+            BinaryOperator::PGBitwiseShiftLeft => "<<",
+            BinaryOperator::PGBitwiseShiftRight => ">>",
         })?;
         Ok(())
     }

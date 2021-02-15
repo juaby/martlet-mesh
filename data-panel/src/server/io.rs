@@ -5,7 +5,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use futures::SinkExt;
 
 use tokio::net::TcpStream;
-use tokio::stream::StreamExt;
+use tokio_stream::{self as stream, StreamExt};
 
 use tokio::net::tcp::ReadHalf;
 use tokio::net::tcp::WriteHalf;

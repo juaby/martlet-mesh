@@ -24,74 +24,74 @@ impl SQLAnalyse for DataType {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
             DataType::Char(size) => {
-                // format_type_with_optional_length(f, "char", size)?;
+                // format_type_with_optional_length(f, "CHAR", size)?;
             },
             DataType::Varchar(size) => {
-                // format_type_with_optional_length(f, "character varying", size)?;
+                // format_type_with_optional_length(f, "CHARACTER VARYING", size)?;
             }
             DataType::Uuid => {
-                // write!(f, "uuid")?;
+                // write!(f, "UUID")?;
             },
             DataType::Clob(size) => {
-                // write!(f, "clob({})", size)?;
+                // write!(f, "CLOB({})", size)?;
             },
             DataType::Binary(size) => {
-                // write!(f, "binary({})", size)?;
+                // write!(f, "BINARY({})", size)?;
             },
             DataType::Varbinary(size) => {
-                // write!(f, "varbinary({})", size)?
+                // write!(f, "VARBINARY({})", size)?
             },
             DataType::Blob(size) => {
-                // write!(f, "blob({})", size)?;
+                // write!(f, "BLOB({})", size)?;
             },
             DataType::Decimal(precision, scale) => {
                 if let Some(scale) = scale {
-                    // write!(f, "numeric({},{})", precision.unwrap(), scale)?;
+                    // write!(f, "NUMERIC({},{})", precision.unwrap(), scale)?;
                 } else {
-                    // format_type_with_optional_length(f, "numeric", precision)?;
+                    // format_type_with_optional_length(f, "NUMERIC", precision)?;
                 }
             }
             DataType::Float(size) => {
-                // format_type_with_optional_length(f, "float", size)?;
+                // format_type_with_optional_length(f, "FLOAT", size)?;
             },
             DataType::SmallInt => {
-                // write!(f, "smallint")?;
+                // write!(f, "SMALLINT")?;
             },
             DataType::Int => {
-                // write!(f, "int")?;
+                // write!(f, "INT")?;
             },
             DataType::BigInt => {
-                // write!(f, "bigint")?;
+                // write!(f, "BIGINT")?;
             },
             DataType::Real => {
-                // write!(f, "real")?;
+                // write!(f, "REAL")?;
             },
             DataType::Double => {
-                // write!(f, "double")?;
+                // write!(f, "DOUBLE")?;
             },
             DataType::Boolean => {
-                // write!(f, "boolean")?;
+                // write!(f, "BOOLEAN")?;
             },
             DataType::Date => {
-                // write!(f, "date")?;
+                // write!(f, "DATE")?;
             },
             DataType::Time => {
-                // write!(f, "time")?;
+                // write!(f, "TIME")?;
             },
             DataType::Timestamp => {
-                // write!(f, "timestamp")?;
+                // write!(f, "TIMESTAMP")?;
             },
             DataType::Interval => {
-                // write!(f, "interval")?;
+                // write!(f, "INTERVAL")?;
             },
             DataType::Regclass => {
-                // write!(f, "regclass")?;
+                // write!(f, "REGCLASS")?;
             },
             DataType::Text => {
-                // write!(f, "text")?;
+                // write!(f, "TEXT")?;
             },
             DataType::Bytea => {
-                // write!(f, "bytea")?;
+                // write!(f, "BYTEA")?;
             },
             DataType::Array(ty) => {
                 ty.analyse(ctx)?;

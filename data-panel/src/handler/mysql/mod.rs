@@ -97,3 +97,41 @@ impl CommandHandler<MySQLPacketPayload> for ComPingHandler {
         Some(vec![ok_payload.get_payload()])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use crate::discovery::database::RouteRules;
+    use std::io::Read;
+    use crate::parser::sql::mysql::parser;
+    use crate::parser::sql::rewrite::SQLReWrite;
+    use std::collections::HashMap;
+    use crate::parser::sql::SQLStatementContext;
+    use crate::parser::sql::analyse::SQLAnalyse;
+
+    #[test]
+    fn test_route() {
+        let sql = "SELECT a, b, 123, myfunc(b) \
+           FROM t_order \
+           WHERE user_id = 1 and a > b AND b < 100 \
+           ORDER BY a DESC, b";
+        //let sql = "insert into test (a, b, c) values (1, 1, ?)";
+        let mut sql_ast = parser(sql.to_string());
+        let sql_stmt = sql_ast.pop().unwrap();
+
+        let mut file = File::open("./etc/dbmesh.yaml").expect("Unable to open file");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).expect("Unable to read file");
+        let rules: RouteRules = serde_yaml::from_str(&contents).unwrap();
+
+        let mut sql_stmt_ctx = SQLStatementContext::Default;
+        sql_stmt.analyse(&mut sql_stmt_ctx).unwrap();
+
+        let mut rewrite_sql = String::new();
+        let mut ctx: HashMap<String, String> = HashMap::new();
+        sql_stmt.rewrite(&mut rewrite_sql, &ctx).unwrap();
+
+        assert_eq!(sql.to_uppercase(), rewrite_sql.to_uppercase());
+    }
+
+}

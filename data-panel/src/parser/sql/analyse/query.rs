@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query};
+use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, With, Offset, OffsetRows, Top};
 
 use std::fmt::Write;
 use std::collections::HashMap;
@@ -24,10 +24,8 @@ use crate::parser::sql::SQLStatementContext;
 /// including `WITH`, `UNION` / other set operations, and `ORDER BY`.
 impl SQLAnalyse for Query {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        if !self.ctes.is_empty() {
-            // write!(f, "WITH ")?;
-            // display_comma_separated(&self.ctes).analyse(ctx)?;
-            // write!(f, " ")?;
+        if let Some(ref with) = self.with {
+            with.analyse(ctx)?;
         }
         self.body.analyse(ctx)?;
         if !self.order_by.is_empty() {
@@ -39,9 +37,8 @@ impl SQLAnalyse for Query {
             limit.analyse(ctx)?;
         }
         if let Some(ref offset) = self.offset {
-            // write!(f, " OFFSET ")?;
+            // write!(f, " ")?;
             offset.analyse(ctx)?;
-            // write!(f, " ROWS")?;
         }
         if let Some(ref fetch) = self.fetch {
             // write!(f, " ")?;
@@ -100,8 +97,7 @@ impl SQLAnalyse for SetOperator {
 /// to a set operation like `UNION`.
 impl SQLAnalyse for Select {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        // write!(f, "SELECT")?;
-        // write!(f, "{} ", if self.distinct { " DISTINCT" } else { "" })?;
+        // write!(f, "SELECT{}", if self.distinct { " DISTINCT" } else { "" })?;
         display_comma_separated(&self.projection).analyse(ctx)?;
         if !self.from.is_empty() {
             // write!(f, " FROM ")?;
@@ -119,6 +115,18 @@ impl SQLAnalyse for Select {
             // write!(f, " HAVING ")?;
             having.analyse(ctx)?;
         }
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for With {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(
+        //     f,
+        //     "WITH {}",
+        //     if self.recursive { "RECURSIVE " } else { "" }
+        // )?;
+        display_comma_separated(&self.cte_tables).analyse(ctx)?;
         Ok(())
     }
 }
@@ -146,7 +154,8 @@ impl SQLAnalyse for SelectItem {
             },
             SelectItem::ExprWithAlias { expr, alias } => {
                 expr.analyse(ctx)?;
-                // write!(f, " AS {}", alias)?;
+                // write!(f, " AS ")?;
+                alias.analyse(ctx)?;
             },
             SelectItem::QualifiedWildcard(prefix) => {
                 prefix.analyse(ctx)?;
@@ -180,23 +189,16 @@ impl SQLAnalyse for TableFactor {
                 args,
                 with_hints,
             } => {
-                // name.analyse(ctx)?; // TODO
-                let table_name = &name.0[0];
-
+                name.analyse(ctx)?;
                 if !args.is_empty() {
                     // write!(f, "(")?;
                     display_comma_separated(args).analyse(ctx)?;
                     // write!(f, ")")?;
                 }
-                let mut alias_name = String::new();
                 if let Some(alias) = alias {
                     // write!(f, " AS ")?;
-                    alias.analyse(ctx)?;  // TODO
-                    alias_name = alias.name.clone();
+                    alias.analyse(ctx)?;
                 }
-
-                ctx.add_table(table_name.clone(), alias_name);
-
                 if !with_hints.is_empty() {
                     // write!(f, " WITH (")?;
                     display_comma_separated(with_hints).analyse(ctx)?;
@@ -221,6 +223,16 @@ impl SQLAnalyse for TableFactor {
                 }
                 Ok(())
             }
+            TableFactor::TableFunction { expr, alias } => {
+                // write!(f, "TABLE(")?;
+                expr.analyse(ctx)?;
+                // write!(f, ")")?;
+                if let Some(alias) = alias {
+                    // write!(f, " AS ")?;
+                    alias.analyse(ctx)?;
+                }
+                Ok(())
+            }
             TableFactor::NestedJoin(table_reference) => {
                 // write!(f, "(")?;
                 table_reference.analyse(ctx)?;
@@ -233,7 +245,7 @@ impl SQLAnalyse for TableFactor {
 
 impl SQLAnalyse for TableAlias {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        // write!(f, "{}", self.name)?;
+        self.name.analyse(ctx)?;
         if !self.columns.is_empty() {
             // write!(f, " (")?;
             display_comma_separated(&self.columns).analyse(ctx)?;
@@ -275,22 +287,38 @@ impl SQLAnalyse for Join {
         }
         match &self.join_operator {
             JoinOperator::Inner(constraint) => {
-                // write!(f, " {}JOIN ", prefix(constraint))?;
+                // write!(
+                //     f,
+                //     " {}JOIN ",
+                //     prefix(constraint)
+                // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::LeftOuter(constraint) => {
-                // write!(f, " {}LEFT JOIN ", prefix(constraint))?;
+                // write!(
+                //     f,
+                //     " {}LEFT JOIN ",
+                //     prefix(constraint)
+                // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::RightOuter(constraint) => {
-                // write!(f, " {}RIGHT JOIN ", prefix(constraint))?;
+                // write!(
+                //     f,
+                //     " {}RIGHT JOIN ",
+                //     prefix(constraint)
+                // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
             },
             JoinOperator::FullOuter(constraint) => {
-                // write!(f, " {}FULL JOIN ", prefix(constraint))?;
+                // write!(
+                //     f,
+                //     " {}FULL JOIN ",
+                //     prefix(constraint)
+                // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
             },
@@ -313,19 +341,37 @@ impl SQLAnalyse for Join {
 
 impl SQLAnalyse for OrderByExpr {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        match self.asc {
-            Some(true) => {
-                self.expr.analyse(ctx)?; // TODO
-                // write!(f, " ASC")?;
-            },
-            Some(false) => {
-                self.expr.analyse(ctx)?; // TODO
-                // write!(f, " DESC")?;
-            },
-            None => {
-                self.expr.analyse(ctx)?; // TODO
-            },
-        }
+        self.expr.analyse(ctx)?;
+        // match self.asc {
+        //     Some(true) => write!(f, " ASC")?,
+        //     Some(false) => write!(f, " DESC")?,
+        //     None => (),
+        // }
+        // match self.nulls_first {
+        //     Some(true) => write!(f, " NULLS FIRST")?,
+        //     Some(false) => write!(f, " NULLS LAST")?,
+        //     None => (),
+        // }
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for Offset {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // write!(f, "OFFSET ")?;
+        self.value.analyse(ctx)?;
+        self.rows.analyse(ctx)?;
+        Ok(())
+    }
+}
+
+impl SQLAnalyse for OffsetRows {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        // match self {
+        //     OffsetRows::None => write!(f, "")?,
+        //     OffsetRows::Row => write!(f, " ROW")?,
+        //     OffsetRows::Rows => write!(f, " ROWS")?,
+        // }
         Ok(())
     }
 }
@@ -345,6 +391,21 @@ impl SQLAnalyse for Fetch {
     }
 }
 
+impl SQLAnalyse for Top {
+    fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
+        let extension = if self.with_ties { " WITH TIES" } else { "" };
+        if let Some(ref quantity) = self.quantity {
+            let percent = if self.percent { " PERCENT" } else { "" };
+            // write!(f, "TOP (")?;
+            quantity.analyse(ctx)?;
+            // write!(f, "){}{}", percent, extension)?;
+        } else {
+            // write!(f, "TOP{}", extension)?;
+        }
+        Ok(())
+    }
+}
+
 impl SQLAnalyse for Values {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         // write!(f, "VALUES ")?;
@@ -353,7 +414,7 @@ impl SQLAnalyse for Values {
             // write!(f, "{}", delim)?;
             delim = ", ";
             // write!(f, "(")?;
-            display_comma_separated(row).analyse(ctx)?; // TODO
+            display_comma_separated(row).analyse(ctx)?;
             // write!(f, ")")?;
         }
         Ok(())

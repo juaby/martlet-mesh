@@ -12,8 +12,8 @@
 
 //! AST types specific to CREATE/ALTER variants of [Statement]
 //! (commonly referred to as Data Definition Language, or DDL)
-use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident};
-use crate::parser::sql::rewrite::{display_comma_separated, SQLReWrite};
+use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident, ReferentialAction};
+use crate::parser::sql::rewrite::{display_comma_separated, SQLReWrite, display_separated};
 
 use std::fmt::Write;
 use std::collections::HashMap;
@@ -28,9 +28,50 @@ impl SQLReWrite for AlterTableOperation {
                 write!(f, "ADD ")?;
                 c.rewrite(f, ctx)?;
             },
+            AlterTableOperation::AddColumn { column_def } => {
+                write!(f, "ADD COLUMN ")?;
+                column_def.rewrite(f, ctx)?;
+            }
             AlterTableOperation::DropConstraint { name } => {
-                write!(f, "DROP CONSTRAINT {}", name)?;
+                write!(f, "DROP CONSTRAINT ")?;
+                name.rewrite(f, ctx)?;
             },
+            AlterTableOperation::DropColumn {
+                column_name,
+                if_exists,
+                cascade,
+            } => {
+                write!(
+                    f,
+                    "DROP COLUMN {}",
+                    if *if_exists { "IF EXISTS " } else { "" }
+                )?;
+                column_name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    "{}",
+                    if *cascade { " CASCADE" } else { "" }
+                )?;
+            },
+            AlterTableOperation::RenameColumn {
+                old_column_name,
+                new_column_name,
+            } => {
+                write!(
+                    f,
+                    "RENAME COLUMN "
+                )?;
+                old_column_name.rewrite(f, ctx)?;
+                write!(
+                    f,
+                    " TO "
+                )?;
+                new_column_name.rewrite(f, ctx)?;
+            },
+            AlterTableOperation::RenameTable { table_name } => {
+                write!(f, "RENAME TO ")?;
+                table_name.rewrite(f, ctx)?;
+            }
         };
         Ok(())
     }
@@ -99,7 +140,8 @@ impl SQLReWrite for TableConstraint {
 /// SQL column definition
 impl SQLReWrite for ColumnDef {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
-        write!(f, "{} ", self.name)?;
+        self.name.rewrite(f, ctx)?;
+        write!(f, " ")?;
         self.data_type.rewrite(f, ctx)?;
         for option in &self.options {
             write!(f, " ")?;
@@ -155,26 +197,41 @@ impl SQLReWrite for ColumnOption {
             ForeignKey {
                 foreign_table,
                 referred_columns,
+                on_delete,
+                on_update,
             } => {
                 write!(
                     f,
                     "REFERENCES "
                 )?;
                 foreign_table.rewrite(f, ctx)?;
-                write!(
-                    f,
-                    " ("
-                )?;
-                display_comma_separated(referred_columns).rewrite(f, ctx)?;
-                write!(
-                    f,
-                    ")"
-                )?;
+                if !referred_columns.is_empty() {
+                    write!(
+                        f,
+                        " ("
+                    )?;
+                    display_comma_separated(referred_columns).rewrite(f, ctx)?;
+                    write!(
+                        f,
+                        ")"
+                    )?;
+                }
+                if let Some(action) = on_delete {
+                    write!(f, " ON DELETE ")?;
+                    action.rewrite(f, ctx)?;
+                }
+                if let Some(action) = on_update {
+                    write!(f, " ON UPDATE ")?;
+                    action.rewrite(f, ctx)?;
+                }
             },
             Check(expr) => {
                 write!(f, "CHECK (")?;
                 expr.rewrite(f, ctx)?;
                 write!(f, ")")?;
+            },
+            DialectSpecific(val) => {
+                display_separated(val, " ").rewrite(f, ctx)?;
             },
         };
         Ok(())
@@ -192,4 +249,17 @@ fn display_constraint_name<'a>(name: &'a Option<Ident>) -> impl SQLReWrite + 'a 
         }
     }
     ConstraintName(name)
+}
+
+impl SQLReWrite for ReferentialAction {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        f.write_str(match self {
+            ReferentialAction::Restrict => "RESTRICT",
+            ReferentialAction::Cascade => "CASCADE",
+            ReferentialAction::SetNull => "SET NULL",
+            ReferentialAction::NoAction => "NO ACTION",
+            ReferentialAction::SetDefault => "SET DEFAULT",
+        })?;
+        Ok(())
+    }
 }
