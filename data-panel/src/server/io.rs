@@ -1,6 +1,6 @@
 use std::net::{SocketAddr};
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut, BufMut};
 
 use futures::SinkExt;
 
