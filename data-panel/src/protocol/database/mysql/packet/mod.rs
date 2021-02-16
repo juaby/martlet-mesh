@@ -1,5 +1,5 @@
 use rand::Rng;
-use crate::protocol::database::mysql::constant::{SEED, NUL, MySQLCapabilityFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLStatusFlag};
+use crate::protocol::database::mysql::constant::{SEED, NUL, MySQLCapabilityFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLStatusFlag, MySQLAuthenticationMethod};
 use bytes::{BytesMut, BufMut, Buf, Bytes};
 use crate::protocol::database::{PacketPayload, DatabasePacket};
 
@@ -321,7 +321,7 @@ impl MySQLHandshakePacket {
             seed1: seed1,
             seed2: seed2,
             capability_flags_upper: 0,
-            auth_plugin_name: "".to_string()
+            auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string()
         }
     }
 }
@@ -346,8 +346,8 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakePac
         payload.put_u16_le(this.capability_flags_upper as u16); // capability_flags_upper
         // isClientPluginAuth
         // seed len
-        if 0 != ((this.capability_flags_upper << 16) & (MySQLCapabilityFlag::ClientPluginAuth as u32)) {
-            payload.put_u8((this.seed1.len() + this.seed2.len()) as u8);
+        if 0 != (this.capability_flags_upper & (MySQLCapabilityFlag::ClientPluginAuth as u32) >> 16) {
+            payload.put_u8((this.seed1.len() + this.seed2.len() + 1) as u8);
         } else {
             payload.put_u8(0);
         }
@@ -356,12 +356,12 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakePac
         payload.put_slice(&reserved);
         // isClientSecureConnection
         // seed 2
-        if 0 != (this.capability_flags_lower & (MySQLCapabilityFlag::ClientSecureConnection as u32)) {
+        if 0 != (this.capability_flags_lower & (MySQLCapabilityFlag::ClientSecureConnection as u32) & 0x00000ffff) {
             payload.put_string_with_nul(this.seed2.as_slice());
         }
         // isClientPluginAuth
         // auth_plugin_name
-        if 0 != ((this.capability_flags_upper << 16) & (MySQLCapabilityFlag::ClientPluginAuth as u32)) {
+        if 0 != (this.capability_flags_upper & (MySQLCapabilityFlag::ClientPluginAuth as u32) >> 16) {
             payload.put_string_with_nul(this.auth_plugin_name.as_bytes());
         }
 
@@ -399,10 +399,27 @@ impl MySQLHandshakeResponse41Packet {
             auth_plugin_name: "".to_string()
         }
     }
+
+    pub fn get_user_name(&self) -> String {
+        self.user_name.clone()
+    }
+
+    pub fn get_database(&self) -> String {
+        self.database.clone()
+    }
+
+    pub fn get_capability_flags(&self) -> u32 {
+        self.capability_flags
+    }
+
+    pub fn get_auth_plugin_name(&self) -> String {
+        self.auth_plugin_name.clone()
+    }
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
     fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+        this.sequence_id = header.sequence_id;
         this.capability_flags = payload.get_uint_le(4) as u32;
         this.max_packet_size = payload.get_uint_le(4) as u32;
         this.character_set = (payload.get_uint(1) & 0xff) as u8;

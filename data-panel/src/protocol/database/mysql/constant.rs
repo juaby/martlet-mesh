@@ -95,6 +95,17 @@ impl MySQLAuthenticationMethod {
 }
 
 ///
+/// MySQL connection phase.
+///
+/// @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase.html">Connection Phase</a>
+///
+pub enum MySQLConnectionPhase {
+    INITIAL_HANDSHAKE,
+    AUTH_PHASE_FAST_PATH,
+    AUTHENTICATION_METHOD_MISMATCH
+}
+
+///
 /// Column types for MySQL.
 ///
 /// @see <a href="https://dev.mysql.com/doc/internals/en/com-query-response.html#column-type">Column Type</a>

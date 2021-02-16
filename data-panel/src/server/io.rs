@@ -20,6 +20,7 @@ use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHe
 use crate::session::{set_session_authorized};
 use crate::handler::mysql::{AuthHandler, CommandRootHandler, CommandHandler, HandshakeHandler};
 use crate::protocol::database::mysql::packet::text::MySQLComQueryPacket;
+use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
 
 pub struct Channel<'a> {
     // socket: &'a TcpStream,
@@ -65,7 +66,8 @@ impl<'a> Channel<'a> {
 pub struct IOContext<'a> {
     id: u64,
     channel: Channel<'a>,
-    client_addr: SocketAddr
+    client_addr: SocketAddr,
+    connection_phase: MySQLConnectionPhase
 }
 
 impl<'a> IOContext<'a> {
@@ -74,7 +76,8 @@ impl<'a> IOContext<'a> {
         IOContext {
             id: id,
             channel: Channel::new(socket),
-            client_addr
+            client_addr,
+            connection_phase: MySQLConnectionPhase::INITIAL_HANDSHAKE
         }
     }
 
@@ -83,10 +86,16 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn handshake(&mut self) -> Result<(), Error> {
+        self.connection_phase = MySQLConnectionPhase::AUTH_PHASE_FAST_PATH;
         self.channel.send(HandshakeHandler::handle(None, None)).await
     }
 
     pub async fn auth(&mut self, mut payload: BytesMut) -> Result<(), Error> {
+        match self.connection_phase {
+            MySQLConnectionPhase::INITIAL_HANDSHAKE => {}
+            MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => {}
+            MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => {}
+        }
         let len = payload.get_uint_le(3);
         let sequence_id = payload.get_uint(1) as u32 & 0xff;
         let command_packet_type = 0u8;
@@ -111,7 +120,6 @@ impl<'a> IOContext<'a> {
         if let Err(e) = self.handshake().await {
             println!("error on sending Handshake Packet response; error = {:?}", e);
         }
-
         let mut authorized = authorized;
         // Here for every line we get back from the `Framed` decoder,
         // we parse the request, and if it's valid we generate a response
@@ -123,7 +131,7 @@ impl<'a> IOContext<'a> {
                         if let Err(e) = self.auth(payload).await {
                             println!("error on sending response; error = {:?}", e);
                         }
-                        authorized = true; //小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
+                        authorized = true; // 小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
                         set_session_authorized(self.id(), true);
                     } else {
                         self.check_process_command_packet(payload).await;

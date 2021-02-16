@@ -1,6 +1,6 @@
 use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket};
 use bytes::Bytes;
-use crate::protocol::database::mysql::constant::MySQLCommandPacketType;
+use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLAuthenticationMethod, MySQLCapabilityFlag};
 use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
 use crate::handler::mysql::binary::{ComStmtResetHandler, ComStmtCloseHandler, ComStmtExecuteHandler, ComStmtPrepareHandler};
 use crate::handler::mysql::text::ComQueryHandler;
@@ -69,6 +69,15 @@ impl CommandHandler<MySQLPacketPayload> for AuthHandler {
 
 
         // TODO Auth Discovery
+        let exists = true;
+        if !handshake_response41_packet.get_database().is_empty() && !exists {
+
+        }
+
+        if (0 != (handshake_response41_packet.get_capability_flags() & (MySQLCapabilityFlag::ClientPluginAuth as u32)))
+            && MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string().eq(handshake_response41_packet.get_auth_plugin_name().as_str()) {
+
+        }
 
         let mut ok_packet = MySQLOKPacket::new(handshake_response41_packet.get_sequence_id() + 1, 0, 0);
         let mut ok_payload = MySQLPacketPayload::new();
@@ -108,6 +117,9 @@ mod tests {
     use std::collections::HashMap;
     use crate::parser::sql::SQLStatementContext;
     use crate::parser::sql::analyse::SQLAnalyse;
+    use mysql::Conn;
+    use mysql::prelude::Queryable;
+    use sqlparser::parser::Parser;
 
     #[test]
     fn test_route() {
