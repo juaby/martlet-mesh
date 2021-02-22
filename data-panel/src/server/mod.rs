@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::net::TcpStream;
 
-use crate::session::{Session, set_session_authorized};
+use crate::session::{SessionContext};
 use crate::server::io::IOContext;
 
 pub mod service;
@@ -16,22 +16,11 @@ pub fn io_context_id() -> u64 {
     IO_CONTEXT_ID_GENERATOR.fetch_add(1, Ordering::SeqCst)
 }
 
-pub async fn start_session(mut session: Session<'_>) {
-    session.start().await;
-}
-
-pub fn create_session_ctx(session_id: u64) {
-    set_session_authorized(session_id, false);
-}
-
 pub async fn handle(mut socket: TcpStream) {
     // Since our protocol is line-based we use `tokio_codecs`'s `LineCodec`
     // to convert our stream of bytes, `socket`, into a `Stream` of lines
     // as well as convert our line based responses into a stream of bytes.
 
-    let io_ctx_id = io_context_id();
-    let io_ctx = IOContext::new(io_ctx_id, &mut socket);
-    let session = Session::new(io_ctx);
-    create_session_ctx(io_ctx_id);
-    start_session(session).await;
+    let mut io_ctx = IOContext::new(io_context_id(), &mut socket);
+    io_ctx.receive(false).await;
 }

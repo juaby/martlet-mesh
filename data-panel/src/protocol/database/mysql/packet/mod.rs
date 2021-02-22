@@ -2,6 +2,7 @@ use rand::Rng;
 use crate::protocol::database::mysql::constant::{SEED, NUL, MySQLCapabilityFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLStatusFlag, MySQLAuthenticationMethod};
 use bytes::{BytesMut, BufMut, Buf, Bytes};
 use crate::protocol::database::{PacketPayload, DatabasePacket};
+use crate::session::SessionContext;
 
 pub mod text;
 pub mod binary;
@@ -418,7 +419,7 @@ impl MySQLHandshakeResponse41Packet {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.capability_flags = payload.get_uint_le(4) as u32;
         this.max_packet_size = payload.get_uint_le(4) as u32;
@@ -701,7 +702,7 @@ impl MySQLComInitDbPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComInitDbPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.schema = Vec::from(bytes.as_slice());
         this
@@ -750,7 +751,7 @@ impl MySQLComFieldListPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComFieldListPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.table = payload.get_string_nul().into_bytes();
         let bytes = payload.get_remaining_bytes();
         this.field_wildcard = Vec::from(bytes.as_slice());

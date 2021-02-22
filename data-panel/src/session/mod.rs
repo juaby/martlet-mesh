@@ -1,19 +1,22 @@
 use std::collections::HashMap;
-use crate::server::io::IOContext;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
 
 pub struct SessionContext {
     id: u64,
     authorized: bool,
+    connection_phase: MySQLConnectionPhase,
+    prepare_stmt_ctx_id: HashMap<String, u64>,
     prepare_stmt_ctx_map: HashMap<u64, PrepareStatementContext>,
 }
 
 impl SessionContext {
-    pub fn new() -> Self {
+    pub fn new(id: u64) -> Self {
         SessionContext {
-            id: 0,
+            id: id,
             authorized: false,
+            connection_phase: MySQLConnectionPhase::INITIAL_HANDSHAKE,
+            prepare_stmt_ctx_id: HashMap::new(),
             prepare_stmt_ctx_map: HashMap::new()
         }
     }
@@ -22,81 +25,55 @@ impl SessionContext {
         self.authorized
     }
 
-    pub fn cache_prepare_stmt_ctx(&mut self, statement_id: u64, prepare_stmt_ctx: PrepareStatementContext) {
-        self.prepare_stmt_ctx_map.insert(statement_id, prepare_stmt_ctx);
+    pub fn set_authorized(&mut self, authorized: bool) {
+        self.authorized = authorized;
+    }
+
+    pub fn cache_prepare_stmt_ctx(&mut self, sql: String, prepare_stmt_ctx: PrepareStatementContext) {
+        self.prepare_stmt_ctx_id.insert(sql, prepare_stmt_ctx.statement_id);
+        self.prepare_stmt_ctx_map.insert(prepare_stmt_ctx.statement_id, prepare_stmt_ctx);
+    }
+
+    pub fn clear_prepare_stmt_ctx(&mut self, statement_id: u64) {
+        let sql = String::from_utf8_lossy(self.get_prepare_stmt_ctx_by_id(statement_id).unwrap().get_sql().as_slice()).to_string();
+        self.prepare_stmt_ctx_id.remove(&*sql);
+        self.prepare_stmt_ctx_map.remove(&statement_id);
     }
 
     pub fn get_prepare_parameters_count(&self, statement_id: u64) -> u16 {
         self.prepare_stmt_ctx_map.get(&statement_id).unwrap().get_parameters_count()
     }
 
+    pub fn get_prepare_parameter_types(&self, statement_id: u64) -> Vec<(u8, u8)> {
+        self.prepare_stmt_ctx_map.get(&statement_id).unwrap().get_parameter_types()
+    }
+
+    pub fn set_prepare_parameter_types(&mut self, statement_id: u64, parameter_types: Vec<(u8, u8)>) {
+        self.prepare_stmt_ctx_map.get_mut(&statement_id).unwrap().set_parameter_types(parameter_types);
+    }
+
     pub fn get_prepare_columns_count(&self, statement_id: u64) -> u16 {
         self.prepare_stmt_ctx_map.get(&statement_id).unwrap().get_columns_count()
     }
-}
 
-pub struct Session<'a> {
-    id: u64,
-    authorized: bool,
-    io_ctx: IOContext<'a>,
-}
+    pub fn get_prepare_stmt_ctx_by_sql(&self, sql: String) -> Option<&PrepareStatementContext> {
+        self.prepare_stmt_ctx_map.get(self.prepare_stmt_ctx_id.get(&sql).unwrap())
+    }
 
-impl<'a> Session<'a> {
-    pub fn new(io_ctx: IOContext<'a>) -> Self {
-        Session {
-            id: io_ctx.id(),
-            authorized: false,
-            io_ctx: io_ctx
+    pub fn get_prepare_stmt_ctx_by_id(&self, statement_id: u64) -> Option<&PrepareStatementContext> {
+        self.prepare_stmt_ctx_map.get(&statement_id)
+    }
+
+    pub fn set_connection_phase(&mut self, connection_phase: MySQLConnectionPhase) {
+        self.connection_phase = connection_phase;
+    }
+
+    pub fn get_connection_phase(&self) -> MySQLConnectionPhase {
+        match self.connection_phase {
+            MySQLConnectionPhase::INITIAL_HANDSHAKE => MySQLConnectionPhase::INITIAL_HANDSHAKE,
+            MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => MySQLConnectionPhase::AUTH_PHASE_FAST_PATH,
+            MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH
         }
-    }
-
-    pub async fn start(&mut self) {
-        self.handle(false).await;
-    }
-
-    pub async fn handle(&mut self, authorized: bool) {
-        self.io_ctx.receive(authorized).await;
-    }
-}
-
-/// The in-memory database shared amongst all clients.
-///
-/// This database will be shared via `Arc`, so to mutate the internal map we're
-/// going to use a `Mutex` for interior mutability.
-pub struct SessionManager {
-    pub sessions: RwLock<HashMap<u64, SessionContext>>,
-}
-
-impl SessionManager {
-    pub fn new() -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(SessionManager { sessions: RwLock::new(HashMap::new()) }))
-    }
-
-    pub fn create_session_ctx(&self, session_id: u64) {
-        let mut sessions = self.sessions.write().unwrap();
-        sessions.insert(session_id, SessionContext::new());
-    }
-
-    pub fn authorized(&self, session_id: u64) -> bool {
-        let session = self.sessions.read().unwrap();
-        let session_ctx = session.get(&session_id).unwrap().clone();
-        session_ctx.authorized
-    }
-
-    pub fn cache_prepare_stmt_ctx(&self, session_id: u64, statement_id: u64, prepare_stmt_ctx: PrepareStatementContext) {
-        let mut sessions = self.sessions.write().unwrap();
-        let sessions_ctx = sessions.get_mut(&session_id).unwrap();
-        sessions_ctx.cache_prepare_stmt_ctx(statement_id, prepare_stmt_ctx);
-    }
-
-    pub fn get_prepare_parameters_count(&self, session_id: u64, statement_id: u64) -> u16 {
-        let sessions = self.sessions.read().unwrap();
-        sessions.get(&session_id).unwrap().get_prepare_parameters_count(statement_id)
-    }
-
-    pub fn get_prepare_columns_count(&self, session_id: u64, statement_id: u64) -> u16 {
-        let sessions = self.sessions.read().unwrap();
-        sessions.get(&session_id).unwrap().get_prepare_columns_count(statement_id)
     }
 }
 
@@ -133,148 +110,107 @@ impl PrepareStatementContext {
     pub fn get_columns_count(&self) -> u16 {
         self.columns_count
     }
+
+    pub fn get_statement_id(&self) -> u64 {
+        self.statement_id
+    }
+
+    pub fn get_parameter_types(&self) -> Vec<(u8, u8)> {
+        self.parameter_types.clone()
+    }
+
+    pub fn set_parameter_types(&mut self, parameter_types: Vec<(u8, u8)>) {
+        self.parameter_types = parameter_types;
+    }
+
 }
 
 lazy_static! {
-    static ref SESSION_CONTEXT_AUTHORIZED: Arc<RwLock<HashMap<u64, bool>>> = Arc::new(RwLock::new(HashMap::new()));
     static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID_GENERATOR: AtomicU64 = AtomicU64::new(1);
-
-    static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_ID: Arc<RwLock<HashMap<String, u64>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT: Arc<RwLock<HashMap<u64, u16>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_STATEMENT_SQL: Arc<RwLock<HashMap<u64, Vec<u8>>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES: Arc<RwLock<HashMap<u64, Vec<(u8, u8)>>>> = Arc::new(RwLock::new(HashMap::new()));
-}
-
-pub fn session_authorized_manager() -> Arc<RwLock<HashMap<u64, bool>>> {
-    SESSION_CONTEXT_AUTHORIZED.clone()
-}
-
-pub fn set_session_authorized(session_id: u64, authorized: bool) {
-    let session_authorized_manager = session_authorized_manager();
-    let mut session_authorized_manager = session_authorized_manager.write().unwrap();
-    session_authorized_manager.insert(session_id, authorized);
-}
-
-pub fn get_session_authorized(session_id: u64) -> bool {
-    let session_authorized_manager = session_authorized_manager();
-    let session_authorized_manager = session_authorized_manager.read().unwrap();
-    *session_authorized_manager.get(&session_id).unwrap()
 }
 
 pub fn session_prepare_stmt_context_statement_id() -> u64 {
     SESSION_PREPARESTMTCONTEXT_STATEMENT_ID_GENERATOR.fetch_add(1, Ordering::SeqCst)
 }
 
-///
-/// clear prepare stmt context
-///
-pub fn clear_session_prepare_stmt_context(statement_id: u64) {
-    let sql = get_session_prepare_stmt_context_sql(statement_id);
-    remove_session_prepare_stmt_context_sql(statement_id);
-    remove_session_prepare_stmt_context_parameter_types(statement_id);
-    remove_session_prepare_stmt_context_parameters_count(statement_id);
-    remove_session_prepare_stmt_context_statement_id(String::from_utf8_lossy(sql.as_slice()).to_string());
-}
+#[cfg(test)]
+mod session_tests {
+    use lazy_static::lazy_static;
+    use std::collections::HashMap;
+    use std::sync::{Arc, RwLock};
+    use std::thread;
+    use std::time::Duration;
 
-pub fn session_prepare_stmt_context_statement_id_manager() -> Arc<RwLock<HashMap<String, u64>>> {
-    SESSION_PREPARESTMTCONTEXT_STATEMENT_ID.clone()
-}
-
-pub fn set_session_prepare_stmt_context_statement_id(sql: String, statement_id: u64) {
-    let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
-    let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.write().unwrap();
-    session_prepare_stmt_context_statement_id_manager.insert(sql, statement_id);
-}
-
-pub fn get_session_prepare_stmt_context_statement_id(sql: String) -> Option<u64> {
-    let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
-    let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.read().unwrap();
-    if let Some(statement_id) = session_prepare_stmt_context_statement_id_manager.get(sql.as_str()) {
-        Some(*statement_id)
-    } else {
-        None
+    #[derive(Default, Debug, Clone)]
+    pub struct Operator {
+        id: u64
     }
-}
 
-pub fn remove_session_prepare_stmt_context_statement_id(sql: String) {
-    let session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager();
-    let mut session_prepare_stmt_context_statement_id_manager = session_prepare_stmt_context_statement_id_manager.write().unwrap();
-    session_prepare_stmt_context_statement_id_manager.remove(sql.as_str());
-}
+    #[derive(Default, Debug, Clone)]
+    pub struct Transaction {
+        id: u64,
+        attrs: Vec<Operator>
+    }
 
-///
-/// session_prepare_stmt_context_parameters_count_manager
-///
-pub fn session_prepare_stmt_context_parameters_count_manager() -> Arc<RwLock<HashMap<u64, u16>>> {
-    SESSION_PREPARESTMTCONTEXT_PARAMETERS_COUNT.clone()
-}
+    #[derive(Default, Debug, Clone)]
+    pub struct Session {
+        id: u64,
+        transaction: Transaction
+    }
 
-pub fn set_session_prepare_stmt_context_parameters_count(statement_id: u64, parameters_count: u16) {
-    let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
-    let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.write().unwrap();
-    session_prepare_stmt_context_parameters_count_manager.insert(statement_id, parameters_count);
-}
+    #[derive(Default, Debug, Clone)]
+    pub struct SessionManager {
+        sessions: HashMap<u64, Session>
+    }
 
-pub fn get_session_prepare_stmt_context_parameters_count(statement_id: u64) -> u16 {
-    let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
-    let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.read().unwrap();
-    *session_prepare_stmt_context_parameters_count_manager.get(&statement_id).unwrap()
-}
+    impl SessionManager {
+        pub fn current() -> Arc<SessionManager> {
+            SESSION_MANAGER.read().unwrap().clone()
+        }
+        pub fn make_current(self) {
+            *SESSION_MANAGER.write().unwrap() = Arc::new(self)
+        }
+    }
 
-pub fn remove_session_prepare_stmt_context_parameters_count(statement_id: u64) {
-    let session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager();
-    let mut session_prepare_stmt_context_parameters_count_manager = session_prepare_stmt_context_parameters_count_manager.write().unwrap();
-    session_prepare_stmt_context_parameters_count_manager.remove(&statement_id);
-}
+    lazy_static! {
+        static ref SESSION_MANAGER: RwLock<Arc<SessionManager>> = RwLock::new(Default::default());
+    }
 
-///
-/// prepare_stmt_context_statement_sql_manager
-///
-pub fn session_prepare_stmt_context_statement_sql_manager() -> Arc<RwLock<HashMap<u64, Vec<u8>>>> {
-    SESSION_PREPARESTMTCONTEXT_STATEMENT_SQL.clone()
-}
+    #[test]
+    fn test_session_cache() {
+        let mut sm = SessionManager {
+            sessions: HashMap::new()
+        };
 
-pub fn set_session_prepare_stmt_context_sql(statement_id: u64, sql: Vec<u8>) {
-    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
-    let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.write().unwrap();
-    session_prepare_stmt_context_statement_sql_manager.insert(statement_id, sql);
-}
+        let session: Session = Session {
+            id: 1,
+            transaction: Default::default()
+        };
+        sm.sessions.insert(1, session);
 
-pub fn get_session_prepare_stmt_context_sql(statement_id: u64) -> Vec<u8> {
-    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
-    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.read().unwrap();
-    let sql = session_prepare_stmt_context_statement_sql_manager.get(&statement_id).unwrap();
-    sql.to_vec()
-}
+        let session: Session = Session {
+            id: 2,
+            transaction: Default::default()
+        };
+        sm.sessions.insert(2, session);
 
-pub fn remove_session_prepare_stmt_context_sql(statement_id: u64) {
-    let session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager();
-    let mut session_prepare_stmt_context_statement_sql_manager = session_prepare_stmt_context_statement_sql_manager.write().unwrap();
-    session_prepare_stmt_context_statement_sql_manager.remove(&statement_id);
-}
+        let handle = thread::spawn(|| {
+            for i in 1..10 {
+                println!("hi number {} from the spawned thread!", i);
+                thread::sleep(Duration::from_millis(1));
+            }
+        });
 
-///
-/// prepare_stmt_context_parameter_types_manager
-///
-pub fn session_prepare_stmt_context_parameter_types_manager() -> Arc<RwLock<HashMap<u64, Vec<(u8, u8)>>>> {
-    SESSION_PREPARESTMTCONTEXT_PARAMETER_TYPES.clone()
-}
+        handle.join().unwrap();
 
-pub fn set_session_prepare_stmt_context_parameter_types(statement_id: u64, parameter_types: Vec<(u8, u8)>) {
-    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
-    let mut session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.write().unwrap();
-    session_prepare_stmt_context_parameter_types_manager.insert(statement_id, parameter_types);
-}
+        sm.make_current();
 
-pub fn get_session_prepare_stmt_context_parameter_types(statement_id: u64) -> Vec<(u8, u8)> {
-    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
-    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.read().unwrap();
-    let parameter_types = session_prepare_stmt_context_parameter_types_manager.get(&statement_id).unwrap().clone();
-    parameter_types.to_vec()
-}
+        println!("{:?}", SessionManager::current());
 
-pub fn remove_session_prepare_stmt_context_parameter_types(statement_id: u64) {
-    let session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager();
-    let mut session_prepare_stmt_context_parameter_types_manager = session_prepare_stmt_context_parameter_types_manager.write().unwrap();
-    session_prepare_stmt_context_parameter_types_manager.remove(&statement_id);
+        let mut new_sm = SessionManager::current().as_ref().clone();
+        new_sm.sessions.remove(&1).unwrap();
+        new_sm.make_current();
+        println!("{:?}", SessionManager::current());
+        assert_eq!(1, 1);
+    }
 }

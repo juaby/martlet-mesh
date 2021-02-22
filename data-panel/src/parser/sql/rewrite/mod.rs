@@ -1054,6 +1054,8 @@ mod tests {
            WHERE a > b AND b < 100 \
            ORDER BY a DESC, b";
         //let sql = "insert into test (a, b, c) values (1, 1, ?)";
+        let sql = "SET NAMES utf8mb4";
+        let sql = "show variables like 'aurora_version'";
         let mut ast = parser(sql.to_string());
         let stmt = ast.pop().unwrap();
         let mut resql = String::new();

@@ -1,7 +1,7 @@
 use crate::protocol::database::DatabasePacket;
 use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload, MySQLPacket};
 use crate::protocol::database::mysql::constant::{MySQLColumnType, MySQLNewParametersBoundFlag, MySQLColumnFlags};
-use crate::session::{get_session_prepare_stmt_context_parameter_types, set_session_prepare_stmt_context_parameter_types, get_session_prepare_stmt_context_sql, get_session_prepare_stmt_context_parameters_count};
+use crate::session::SessionContext;
 
 /**
  * COM_STMT_PREPARE command packet for MySQL.
@@ -33,7 +33,7 @@ impl MySQLComStmtPreparePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtPreparePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.sql = Vec::from(bytes.as_slice());
         this
@@ -136,6 +136,14 @@ impl MySQLComStmtExecutePacket {
         self.sql.clone()
     }
 
+    pub fn set_sql(&mut self, sql: Vec<u8>) {
+        self.sql = sql;
+    }
+
+    pub fn get_statement_id(&self) -> u32 {
+        self.statement_id
+    }
+
     pub fn get_command_type(&self) -> u8 {
         self.command_type
     }
@@ -146,15 +154,15 @@ impl MySQLComStmtExecutePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecutePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
-        this.sql = get_session_prepare_stmt_context_sql(this.statement_id as u64);
+        this.sql = session_ctx.get_prepare_stmt_ctx_by_id(this.statement_id as u64).unwrap().get_sql();
         this.flags = (payload.get_uint(1) & 0xff) as u16;
         this.iteration_count = payload.get_uint_le(4) as u32;
         assert_eq!(1, this.iteration_count);
         let session_id = header.get_session_id();
-        let parameters_count = get_session_prepare_stmt_context_parameters_count(this.statement_id as u64);
+        let parameters_count = session_ctx.get_prepare_parameters_count(this.statement_id as u64);
         //
         // Null bitmap for MySQL.
         //
@@ -177,9 +185,9 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtExecu
                     let unsigned_flag = (payload.get_uint(1) & 0xff) as u8;
                     parameter_types.push((column_type, unsigned_flag));
                 }
-                set_session_prepare_stmt_context_parameter_types( this.statement_id as u64, parameter_types.clone());
+                session_ctx.set_prepare_parameter_types(this.statement_id as u64, parameter_types.clone());
             } else {
-                parameter_types = get_session_prepare_stmt_context_parameter_types(this.statement_id as u64);
+                parameter_types = session_ctx.get_prepare_parameter_types(this.statement_id as u64);
             }
             this.parameters = Vec::with_capacity(num_params);
             for i in 0..num_params {
@@ -288,7 +296,7 @@ impl MySQLComStmtClosePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtClosePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
 
@@ -328,7 +336,7 @@ impl MySQLComStmtResetPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComStmtResetPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
 

@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use crate::session::SessionContext;
 
 pub mod mysql;
 pub mod postgresql;
@@ -35,7 +36,7 @@ pub trait DatabasePacket<H, T: PacketPayload> {
      *
      * @param payload packet payload to be written
      */
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p H, payload: &'p mut T) -> &'d mut Self { this }
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p H, payload: &'p mut T, session_ctx: &mut SessionContext) -> &'d mut Self { this }
 }
 
 /**

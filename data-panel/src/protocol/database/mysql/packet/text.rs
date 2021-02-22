@@ -1,5 +1,6 @@
 use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader, MySQLPacket};
 use crate::protocol::database::DatabasePacket;
+use crate::session::SessionContext;
 
 /**
  * COM_QUERY command packet for MySQL.
@@ -31,7 +32,7 @@ impl MySQLComQueryPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLComQueryPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload) -> &'d mut Self {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.sql = Vec::from(bytes.as_slice());
         this

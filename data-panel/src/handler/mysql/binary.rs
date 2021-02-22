@@ -1,7 +1,6 @@
 use crate::handler::mysql::CommandHandler;
 use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader, MySQLOKPacket, MySQLEOFPacket, MySQLColumnDefinition41Packet, MySQLFieldCountPacket};
 use crate::protocol::database::{DatabasePacket, PacketPayload};
-use crate::session::{clear_session_prepare_stmt_context, get_session_prepare_stmt_context_statement_id, session_prepare_stmt_context_statement_id, set_session_prepare_stmt_context_sql, set_session_prepare_stmt_context_parameters_count};
 use sqlparser::ast::Statement;
 use mysql::{Value, Conn, Params};
 use crate::protocol::database::mysql::packet::binary::{PrepareParamValue, MySQLComStmtResetPacket, MySQLComStmtPrepareOKPacket, MySQLComStmtPreparePacket, MySQLBinaryResultSetRowPacket, MySQLComStmtExecutePacket, MySQLComStmtClosePacket};
@@ -9,15 +8,16 @@ use crate::parser;
 use bytes::Bytes;
 use crate::protocol::database::mysql::constant::{CHARSET, MySQLColumnType};
 use mysql::prelude::Queryable;
+use crate::session::{SessionContext, PrepareStatementContext, session_prepare_stmt_context_statement_id};
 
 pub struct ComStmtPrepareHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
-    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut prepare_packet = MySQLComStmtPreparePacket::new(command_packet_type);
-        let command_packet = DatabasePacket::decode(&mut prepare_packet, &command_packet_header, &mut command_payload);
+        let command_packet = DatabasePacket::decode(&mut prepare_packet, &command_packet_header, &mut command_payload, session_ctx);
         // TODO
         let sql = command_packet.get_sql();
         let sql = String::from_utf8_lossy(sql.as_slice());
@@ -31,12 +31,11 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
         let mut global_sequence_id: u32 = 1;
         let session_id = command_packet_header.get_session_id();
         let mut statement_id = 0;
-        if let Some(cache_statement_id) = get_session_prepare_stmt_context_statement_id(sql.to_string()) {
-            statement_id = cache_statement_id;
+        if let Some(prepare_stmt_ctx) = session_ctx.get_prepare_stmt_ctx_by_sql(sql.to_string()) {
+            statement_id = prepare_stmt_ctx.get_statement_id();
         } else {
             statement_id = session_prepare_stmt_context_statement_id();
-            set_session_prepare_stmt_context_parameters_count(statement_id, parameters_count);
-            set_session_prepare_stmt_context_sql(statement_id, command_packet.get_sql());
+            session_ctx.cache_prepare_stmt_ctx(sql.to_string(), PrepareStatementContext::new(statement_id, parameters_count, columns_count, command_packet.get_sql()));
         }
 
         let mut prepare_ok_packet = MySQLComStmtPrepareOKPacket::new(
@@ -139,13 +138,12 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtPrepareHandler {
 
 pub struct ComStmtExecuteHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
-    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut stmt_execute_packet = MySQLComStmtExecutePacket::new(command_packet_type);
-        let stmt_execute_packet = DatabasePacket::decode(&mut stmt_execute_packet, &command_packet_header, &mut command_payload);
-
+        let stmt_execute_packet = DatabasePacket::decode(&mut stmt_execute_packet, &command_packet_header, &mut command_payload, session_ctx);
         let mut payloads = Vec::new();
         let database_url = "mysql://root:root@localhost:8306/test";
         let mut conn = Conn::new(database_url).unwrap();
@@ -298,14 +296,14 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
 
 pub struct ComStmtCloseHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComStmtCloseHandler {
-    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut stmt_close_packet = MySQLComStmtClosePacket::new(command_packet_type);
-        let stmt_close_packet = DatabasePacket::decode(&mut stmt_close_packet, &command_packet_header, &mut command_payload);
+        let stmt_close_packet = DatabasePacket::decode(&mut stmt_close_packet, &command_packet_header, &mut command_payload, session_ctx);
 
-        clear_session_prepare_stmt_context(stmt_close_packet.get_statement_id() as u64);
+        session_ctx.clear_prepare_stmt_ctx(stmt_close_packet.get_statement_id() as u64);
 
         None
     }
@@ -313,12 +311,12 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtCloseHandler {
 
 pub struct ComStmtResetHandler {}
 impl CommandHandler<MySQLPacketPayload> for ComStmtResetHandler {
-    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>) -> Option<Vec<Bytes>> {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet.unwrap();
         let mut stmt_reset_packet = MySQLComStmtResetPacket::new(command_packet_type);
-        let stmt_reset_packet = DatabasePacket::decode(&mut stmt_reset_packet, &command_packet_header, &mut command_payload);
+        let stmt_reset_packet = DatabasePacket::decode(&mut stmt_reset_packet, &command_packet_header, &mut command_payload, session_ctx);
 
         // TODO reset prepare context: fetch cursor long data
 

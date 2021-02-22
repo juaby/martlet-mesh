@@ -1,2 +1,1 @@
-//! Citadel 通过内置身份和凭证管理提供服务间和最终用户的身份认证。
-//! 支持基于角色的访问控制、基于服务标识的策略执行等
+//! Responsible for certificate issuance and rotation.

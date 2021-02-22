@@ -17,7 +17,7 @@ use crate::protocol::database::mysql::codec::{read_frame, write_frame};
 use futures::io::{Error};
 use std::io::ErrorKind;
 use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader};
-use crate::session::{set_session_authorized};
+use crate::session::{SessionContext};
 use crate::handler::mysql::{AuthHandler, CommandRootHandler, CommandHandler, HandshakeHandler};
 use crate::protocol::database::mysql::packet::text::MySQLComQueryPacket;
 use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
@@ -67,7 +67,7 @@ pub struct IOContext<'a> {
     id: u64,
     channel: Channel<'a>,
     client_addr: SocketAddr,
-    connection_phase: MySQLConnectionPhase
+    session_ctx: SessionContext
 }
 
 impl<'a> IOContext<'a> {
@@ -77,7 +77,7 @@ impl<'a> IOContext<'a> {
             id: id,
             channel: Channel::new(socket),
             client_addr,
-            connection_phase: MySQLConnectionPhase::INITIAL_HANDSHAKE
+            session_ctx: SessionContext::new(id)
         }
     }
 
@@ -86,12 +86,12 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn handshake(&mut self) -> Result<(), Error> {
-        self.connection_phase = MySQLConnectionPhase::AUTH_PHASE_FAST_PATH;
-        self.channel.send(HandshakeHandler::handle(None, None)).await
+        self.session_ctx.set_connection_phase(MySQLConnectionPhase::AUTH_PHASE_FAST_PATH);
+        self.channel.send(HandshakeHandler::handle(None, None, &mut self.session_ctx)).await
     }
 
     pub async fn auth(&mut self, mut payload: BytesMut) -> Result<(), Error> {
-        match self.connection_phase {
+        match self.session_ctx.get_connection_phase() {
             MySQLConnectionPhase::INITIAL_HANDSHAKE => {}
             MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => {}
             MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => {}
@@ -102,7 +102,7 @@ impl<'a> IOContext<'a> {
         let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
 
         let handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
-        self.channel.send(AuthHandler::handle(Some(header), Some(handshake_response41_payload))).await
+        self.channel.send(AuthHandler::handle(Some(header), Some(handshake_response41_payload), &mut self.session_ctx)).await
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
@@ -111,7 +111,7 @@ impl<'a> IOContext<'a> {
         let command_packet_type = payload.get_uint(1) as u8;
         let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
         let command_payload = MySQLPacketPayload::new_with_payload(payload);
-        if let Err(e) = self.channel.send(CommandRootHandler::handle(Some(header), Some(command_payload))).await {
+        if let Err(e) = self.channel.send(CommandRootHandler::handle(Some(header), Some(command_payload), &mut self.session_ctx)).await {
             println!("error on sending response; error = {:?}", e);
         }
     }
@@ -132,7 +132,7 @@ impl<'a> IOContext<'a> {
                             println!("error on sending response; error = {:?}", e);
                         }
                         authorized = true; // 小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
-                        set_session_authorized(self.id(), true);
+                        self.session_ctx.set_authorized(authorized);
                     } else {
                         self.check_process_command_packet(payload).await;
                     }
