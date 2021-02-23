@@ -1,6 +1,6 @@
-use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket};
+use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket, MySQLAuthSwitchRequestPacket, MySQLAuthSwitchResponsePacket};
 use bytes::Bytes;
-use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLAuthenticationMethod, MySQLCapabilityFlag};
+use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLAuthenticationMethod, MySQLCapabilityFlag, MySQLConnectionPhase};
 use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
 use crate::handler::mysql::binary::{ComStmtResetHandler, ComStmtCloseHandler, ComStmtExecuteHandler, ComStmtPrepareHandler};
 use crate::handler::mysql::text::ComQueryHandler;
@@ -53,38 +53,59 @@ impl CommandHandler<MySQLPacketPayload> for CommandRootHandler {
 pub struct HandshakeHandler {}
 impl CommandHandler<MySQLPacketPayload> for HandshakeHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
-        let mut handshake_packet = MySQLHandshakePacket::new(100); // TODO how to gen thread id
+        let mut handshake_packet = MySQLHandshakePacket::new(session_ctx.get_thread_id() as u32, session_ctx.get_auth_plugin_data1(), session_ctx.get_auth_plugin_data2());
         let mut handshake_payload = MySQLPacketPayload::new();
         let handshake_payload = DatabasePacket::encode(&mut handshake_packet, &mut handshake_payload);
         Some(vec![handshake_payload.get_payload()])
     }
 }
 
-pub struct AuthHandler {}
-impl CommandHandler<MySQLPacketPayload> for AuthHandler {
+pub struct AuthPhaseFastPathHandler {}
+impl CommandHandler<MySQLPacketPayload> for AuthPhaseFastPathHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
         let mut handshake_response41_payload = payload.unwrap();
         let mut handshake_response41_packet = MySQLHandshakeResponse41Packet::new();
         let handshake_response41_packet = DatabasePacket::decode(&mut handshake_response41_packet, &command_packet_header, &mut handshake_response41_payload, session_ctx);
 
+        let mut payloads = vec![];
 
         // TODO Auth Discovery
         let exists = true;
         if !handshake_response41_packet.get_database().is_empty() && !exists {
-
+            // TODO MySQLErrPacket
         }
 
         if (0 != (handshake_response41_packet.get_capability_flags() & (MySQLCapabilityFlag::ClientPluginAuth as u32)))
             && MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string().eq(handshake_response41_packet.get_auth_plugin_name().as_str()) {
+            session_ctx.set_connection_phase(MySQLConnectionPhase::AUTH_PHASE_FAST_PATH);
 
+            let mut ok_auth_switch_request_packet = MySQLAuthSwitchRequestPacket::new(handshake_response41_packet.get_sequence_id() + 1, session_ctx.get_auth_plugin_data1(), session_ctx.get_auth_plugin_data2());
+            let mut auth_switch_request_payload = MySQLPacketPayload::new();
+            let auth_switch_request_payload = DatabasePacket::encode(&mut ok_auth_switch_request_packet, &mut auth_switch_request_payload);
+
+            payloads.push(auth_switch_request_payload.get_payload());
         }
 
-        let mut ok_packet = MySQLOKPacket::new(handshake_response41_packet.get_sequence_id() + 1, 0, 0);
-        let mut ok_payload = MySQLPacketPayload::new();
-        let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
+        session_ctx.set_user_name(handshake_response41_packet.get_user_name());
+        session_ctx.set_auth_response(handshake_response41_packet.get_auth_response());
+        session_ctx.set_database(handshake_response41_packet.get_database());
 
-        Some(vec![ok_payload.get_payload()])
+        Some(payloads)
+    }
+}
+
+pub struct AuthMethodMismatchHandler {}
+impl CommandHandler<MySQLPacketPayload> for AuthMethodMismatchHandler {
+    fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
+        let command_packet_header = command_packet_header.unwrap();
+        let mut auth_switch_response_payload = payload.unwrap();
+        let mut auth_switch_response_packet = MySQLAuthSwitchResponsePacket::new();
+        let auth_switch_response_packet = DatabasePacket::decode(&mut auth_switch_response_packet, &command_packet_header, &mut auth_switch_response_payload, session_ctx);
+
+        session_ctx.set_auth_response(auth_switch_response_packet.get_auth_response());
+
+        None
     }
 }
 

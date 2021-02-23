@@ -1,24 +1,45 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
+use crate::protocol::database::mysql::packet::generate_random_bytes;
 
 pub struct SessionContext {
     id: u64,
     authorized: bool,
     connection_phase: MySQLConnectionPhase,
+    auth_plugin_data1: Vec<u8>,
+    auth_plugin_data2: Vec<u8>,
     prepare_stmt_ctx_id: HashMap<String, u64>,
     prepare_stmt_ctx_map: HashMap<u64, PrepareStatementContext>,
+    character_set: u8,
+    user_name: String,
+    auth_response: Vec<u8>,
+    database: String,
 }
 
 impl SessionContext {
     pub fn new(id: u64) -> Self {
+        let mut seed1: Vec<u8> = Vec::new();
+        let mut seed2: Vec<u8> = Vec::new();
+        let auth_plugin_data1= generate_random_bytes(8, seed1.as_mut());
+        let auth_plugin_data2= generate_random_bytes(12, seed2.as_mut());
         SessionContext {
             id: id,
             authorized: false,
             connection_phase: MySQLConnectionPhase::INITIAL_HANDSHAKE,
+            auth_plugin_data1: auth_plugin_data1,
+            auth_plugin_data2: auth_plugin_data2,
             prepare_stmt_ctx_id: HashMap::new(),
-            prepare_stmt_ctx_map: HashMap::new()
+            prepare_stmt_ctx_map: HashMap::new(),
+            character_set: 0,
+            user_name: "".to_string(),
+            auth_response: vec![],
+            database: "".to_string()
         }
+    }
+
+    pub fn get_thread_id(&self) -> u64 {
+        self.id
     }
 
     pub fn get_authorized(&self) -> bool {
@@ -27,6 +48,38 @@ impl SessionContext {
 
     pub fn set_authorized(&mut self, authorized: bool) {
         self.authorized = authorized;
+    }
+
+    pub fn get_auth_plugin_data1(&self) -> Vec<u8> {
+        self.auth_plugin_data1.clone()
+    }
+
+    pub fn get_auth_plugin_data2(&self) -> Vec<u8> {
+        self.auth_plugin_data2.clone()
+    }
+
+    pub fn get_user_name(&self) -> String {
+        self.user_name.clone()
+    }
+
+    pub fn set_user_name(&mut self, user_name: String) {
+        self.user_name = user_name;
+    }
+
+    pub fn get_auth_response(&self) -> Vec<u8> {
+        self.auth_response.clone()
+    }
+
+    pub fn set_auth_response(&mut self, auth_response: Vec<u8>) {
+        self.auth_response = auth_response;
+    }
+
+    pub fn get_database(&self) -> String {
+        self.database.clone()
+    }
+
+    pub fn set_database(&mut self, database: String) {
+        self.database = database;
     }
 
     pub fn cache_prepare_stmt_ctx(&mut self, sql: String, prepare_stmt_ctx: PrepareStatementContext) {

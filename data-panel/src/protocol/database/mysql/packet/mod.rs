@@ -254,6 +254,13 @@ impl MySQLPacketPayload {
         tmp.to_vec()
     }
 
+    /**
+     * Read rest of packet string from byte buffers and return bytes.
+     *
+     * @see <a href="https://dev.mysql.com/doc/internals/en/string.html#packet-Protocol::RestOfPacketString">RestOfPacketString</a>
+     *
+     * @return rest of packet string bytes
+     */
     pub fn get_remaining_bytes(&mut self) -> Vec<u8> {
         self.bytes_mut.to_vec()
     }
@@ -265,11 +272,6 @@ impl PacketPayload for MySQLPacketPayload {
     }
 }
 
-/**
- * Handshake packet protocol for MySQL.
- *
- * @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::Handshake">Handshake</a>
- */
 pub trait MySQLPacket {
     /**
      * Get sequence ID.
@@ -279,6 +281,11 @@ pub trait MySQLPacket {
     fn get_sequence_id(&self) -> u32;
 }
 
+/**
+ * Handshake packet protocol for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::Handshake">Handshake</a>
+ */
 pub struct MySQLHandshakePacket {
     protocol_version: u8,
     server_version: String,
@@ -293,12 +300,7 @@ pub struct MySQLHandshakePacket {
 }
 
 impl MySQLHandshakePacket {
-    pub fn new(thread_id: u32) -> Self {
-        let mut seed1: Vec<u8> = Vec::new();
-        let mut seed2: Vec<u8> = Vec::new();
-        let seed1= generate_random_bytes(8, seed1.as_mut());
-        let seed2= generate_random_bytes(12, seed2.as_mut());
-
+    pub fn new(thread_id: u32, seed1: Vec<u8>, seed2: Vec<u8>) -> Self {
         let mut capability_flags_lower: u32 = 0; // capability_flags_lower
         capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientLongPassword as u32;
         capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientFoundRows as u32;
@@ -371,11 +373,50 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakePac
 }
 
 /**
+ * MySQL auth switch request packet.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::AuthSwitchRequest">AuthSwitchRequest</a>
+ */
+pub struct MySQLAuthSwitchRequestPacket {
+    sequence_id: u32,
+    auth_plugin_name: String,
+    seed1: Vec<u8>,
+    seed2: Vec<u8>,
+}
+
+impl MySQLAuthSwitchRequestPacket {
+    pub fn new(sequence_id: u32, seed1: Vec<u8>, seed2: Vec<u8>) -> Self {
+        MySQLAuthSwitchRequestPacket {
+            sequence_id: sequence_id,
+            seed1: seed1,
+            seed2: seed2,
+            auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string()
+        }
+    }
+}
+
+impl MySQLPacket for MySQLAuthSwitchRequestPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLAuthSwitchRequestPacket {
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(0xfe);
+        payload.put_string_with_nul(this.auth_plugin_name.as_bytes());
+        payload.put_slice(this.seed1.as_slice());
+        payload.put_string_with_nul(this.seed2.as_slice());
+        payload
+    }
+}
+
+/**
  * Handshake response above MySQL 4.1 packet protocol.
  *
  * @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeResponse41">HandshakeResponse41</a>
  */
-
 pub struct MySQLHandshakeResponse41Packet {
     sequence_id: u32,
     max_packet_size: u32,
@@ -403,6 +444,10 @@ impl MySQLHandshakeResponse41Packet {
 
     pub fn get_user_name(&self) -> String {
         self.user_name.clone()
+    }
+
+    pub fn get_auth_response(&self) -> Vec<u8> {
+        self.auth_response.clone()
     }
 
     pub fn get_database(&self) -> String {
@@ -454,6 +499,43 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeRes
 }
 
 impl MySQLPacket for MySQLHandshakeResponse41Packet {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * MySQL auth switch request packet.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::AuthSwitchResponse">AuthSwitchResponse</a>
+ */
+pub struct MySQLAuthSwitchResponsePacket {
+    sequence_id: u32,
+    auth_response: Vec<u8>,
+}
+
+impl MySQLAuthSwitchResponsePacket {
+    pub fn new() -> Self {
+        MySQLAuthSwitchResponsePacket {
+            sequence_id: 0,
+            auth_response: vec![],
+        }
+    }
+
+    pub fn get_auth_response(&self) -> Vec<u8> {
+        self.auth_response.clone()
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLAuthSwitchResponsePacket {
+    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+        this.sequence_id = header.sequence_id;
+        this.auth_response = payload.get_remaining_bytes();
+        this
+    }
+}
+
+impl MySQLPacket for MySQLAuthSwitchResponsePacket {
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }

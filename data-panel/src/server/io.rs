@@ -16,11 +16,12 @@ use crate::protocol::database::mysql::codec::{read_frame, write_frame};
 
 use futures::io::{Error};
 use std::io::ErrorKind;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader};
+use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader, MySQLAuthSwitchResponsePacket, MySQLOKPacket};
 use crate::session::{SessionContext};
-use crate::handler::mysql::{AuthHandler, CommandRootHandler, CommandHandler, HandshakeHandler};
+use crate::handler::mysql::{CommandRootHandler, CommandHandler, HandshakeHandler, AuthPhaseFastPathHandler, AuthMethodMismatchHandler};
 use crate::protocol::database::mysql::packet::text::MySQLComQueryPacket;
 use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
+use crate::protocol::database::{DatabasePacket, PacketPayload};
 
 pub struct Channel<'a> {
     // socket: &'a TcpStream,
@@ -91,18 +92,32 @@ impl<'a> IOContext<'a> {
     }
 
     pub async fn auth(&mut self, mut payload: BytesMut) -> Result<(), Error> {
-        match self.session_ctx.get_connection_phase() {
-            MySQLConnectionPhase::INITIAL_HANDSHAKE => {}
-            MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => {}
-            MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => {}
-        }
         let len = payload.get_uint_le(3);
         let sequence_id = payload.get_uint(1) as u32 & 0xff;
         let command_packet_type = 0u8;
         let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
 
-        let handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
-        self.channel.send(AuthHandler::handle(Some(header), Some(handshake_response41_payload), &mut self.session_ctx)).await
+        match self.session_ctx.get_connection_phase() {
+            MySQLConnectionPhase::INITIAL_HANDSHAKE => {},
+            MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => {
+                let handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
+                if let Some(payloads) = AuthPhaseFastPathHandler::handle(Some(header), Some(handshake_response41_payload), &mut self.session_ctx) {
+                    self.channel.send(Option::from(payloads)).await;
+                }
+            },
+            MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => {
+                let mut auth_switch_response_payload = MySQLPacketPayload::new_with_payload(payload);
+                AuthMethodMismatchHandler::handle(Some(header), Some(auth_switch_response_payload), &mut self.session_ctx);
+            }
+        }
+
+        // TODO login
+
+        let mut ok_packet = MySQLOKPacket::new(sequence_id + 1, 0, 0);
+        let mut ok_payload = MySQLPacketPayload::new();
+        let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
+
+        self.channel.send(Some(vec![ok_payload.get_payload()])).await
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
