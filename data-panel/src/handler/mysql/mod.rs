@@ -76,9 +76,9 @@ impl CommandHandler<MySQLPacketPayload> for AuthPhaseFastPathHandler {
             // TODO MySQLErrPacket
         }
 
-        if (0 != (handshake_response41_packet.get_capability_flags() & (MySQLCapabilityFlag::ClientPluginAuth as u32)))
+        if handshake_response41_packet.get_capability_flags().contains(MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH)
             && MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string().eq(handshake_response41_packet.get_auth_plugin_name().as_str()) {
-            session_ctx.set_connection_phase(MySQLConnectionPhase::AUTH_PHASE_FAST_PATH);
+            session_ctx.set_connection_phase(MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH);
 
             let mut ok_auth_switch_request_packet = MySQLAuthSwitchRequestPacket::new(handshake_response41_packet.get_sequence_id() + 1, session_ctx.get_auth_plugin_data1(), session_ctx.get_auth_plugin_data2());
             let mut auth_switch_request_payload = MySQLPacketPayload::new();

@@ -235,8 +235,7 @@ impl MySQLPacketPayload {
      */
     pub fn get_string_lenenc(&mut self) -> Vec<u8> {
         let length = self.get_int_lenenc() as u32;
-        let tmp = self.bytes_mut.split_to(length as usize);
-        tmp.to_vec()
+        self.bytes_mut.split_to(length as usize).to_vec()
     }
 
     /**
@@ -250,8 +249,20 @@ impl MySQLPacketPayload {
     */
     pub fn get_string_fix(&mut self) -> Vec<u8> {
         let length = self.bytes_mut.get_uint(1) as u32 & 0xff;
-        let tmp = self.bytes_mut.split_to(length as usize);
-        tmp.to_vec()
+        self.bytes_mut.split_to(length as usize).to_vec()
+    }
+
+    /**
+    * Read fixed length string from byte buffers and return bytes.
+    *
+    * @see <a href="https://dev.mysql.com/doc/internals/en/string.html#packet-Protocol::FixedLengthString">FixedLengthString</a>
+    *
+    * @param length length of fixed string
+    *
+    * @return fixed length bytes
+    */
+    pub fn get_string_fix_length(&mut self, length: u32) -> Vec<u8> {
+        self.bytes_mut.split_to(length as usize).to_vec()
     }
 
     /**
@@ -290,40 +301,40 @@ pub struct MySQLHandshakePacket {
     protocol_version: u8,
     server_version: String,
     thread_id: u32,
-    capability_flags_lower: u32,
+    capability_flags: MySQLCapabilityFlag,
     character_set: u8,
     status_flag: u32,
     seed1: Vec<u8>,
     seed2: Vec<u8>,
-    capability_flags_upper: u32,
     auth_plugin_name: String,
 }
 
 impl MySQLHandshakePacket {
     pub fn new(thread_id: u32, seed1: Vec<u8>, seed2: Vec<u8>) -> Self {
-        let mut capability_flags_lower: u32 = 0; // capability_flags_lower
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientLongPassword as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientFoundRows as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientLongFlag as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientConnectWithDb as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientOdbc as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientIgnoreSpace as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientProtocol41 as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientInteractive as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientIgnoreSigpipe as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientTransactions as u32;
-        capability_flags_lower = capability_flags_lower | MySQLCapabilityFlag::ClientSecureConnection as u32;
+        let mut capability_flags: MySQLCapabilityFlag = MySQLCapabilityFlag::empty(); // capability_flags_lower
+        capability_flags |= MySQLCapabilityFlag::CLIENT_LONG_PASSWORD;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_FOUND_ROWS;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_LONG_FLAG;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_CONNECT_WITH_DB;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_ODBC;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_IGNORE_SPACE;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_PROTOCOL_41;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_INTERACTIVE;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_IGNORE_SIGPIPE;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_TRANSACTIONS;
+        capability_flags |= MySQLCapabilityFlag::CLIENT_SECURE_CONNECTION;
+
+        capability_flags |= MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH;
 
         MySQLHandshakePacket {
             protocol_version: PROTOCOL_VERSION,
             server_version: SERVER_VERSION.to_string(),
             thread_id: thread_id,
-            capability_flags_lower: capability_flags_lower,
+            capability_flags: capability_flags,
             character_set: CHARSET,
             status_flag: MySQLStatusFlag::ServerStatusAutocommit as u32,
             seed1: seed1,
             seed2: seed2,
-            capability_flags_upper: 0,
             auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string()
         }
     }
@@ -342,14 +353,13 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakePac
         payload.put_string_with_nul(this.server_version.as_bytes()); // server version
         payload.put_u32_le(this.thread_id); //thread id
         payload.put_string_with_nul(this.seed1.as_slice()); //seed 1
-        payload.put_u16_le(this.capability_flags_lower as u16); // capability_flags_lower
+        payload.put_u16_le((this.capability_flags.bits() & 0xFFFF) as u16); // capability_flags_lower
         payload.put_u8(this.character_set); // charset
         payload.put_u16_le(this.status_flag as u16); // server status
-        //capability_flags_upper = capability_flags_upper | (MySQLCapabilityFlag::ClientPluginAuth as u32);
-        payload.put_u16_le(this.capability_flags_upper as u16); // capability_flags_upper
+        payload.put_u16_le((this.capability_flags.bits() >> 16) as u16); // capability_flags_upper
         // isClientPluginAuth
         // seed len
-        if 0 != (this.capability_flags_upper & (MySQLCapabilityFlag::ClientPluginAuth as u32) >> 16) {
+        if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH) {
             payload.put_u8((this.seed1.len() + this.seed2.len() + 1) as u8);
         } else {
             payload.put_u8(0);
@@ -359,12 +369,12 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakePac
         payload.put_slice(&reserved);
         // isClientSecureConnection
         // seed 2
-        if 0 != (this.capability_flags_lower & (MySQLCapabilityFlag::ClientSecureConnection as u32) & 0x00000ffff) {
+        if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_SECURE_CONNECTION) {
             payload.put_string_with_nul(this.seed2.as_slice());
         }
         // isClientPluginAuth
         // auth_plugin_name
-        if 0 != (this.capability_flags_upper & (MySQLCapabilityFlag::ClientPluginAuth as u32) >> 16) {
+        if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH) {
             payload.put_string_with_nul(this.auth_plugin_name.as_bytes());
         }
 
@@ -423,7 +433,7 @@ pub struct MySQLHandshakeResponse41Packet {
     character_set: u8,
     user_name: String,
     auth_response: Vec<u8>,
-    capability_flags: u32,
+    capability_flags: MySQLCapabilityFlag,
     database: String,
     auth_plugin_name: String,
 }
@@ -436,7 +446,7 @@ impl MySQLHandshakeResponse41Packet {
             character_set: 0,
             user_name: "".to_string(),
             auth_response: vec![],
-            capability_flags: 0,
+            capability_flags: MySQLCapabilityFlag::empty(),
             database: "".to_string(),
             auth_plugin_name: "".to_string()
         }
@@ -454,7 +464,7 @@ impl MySQLHandshakeResponse41Packet {
         self.database.clone()
     }
 
-    pub fn get_capability_flags(&self) -> u32 {
+    pub fn get_capability_flags(&self) -> MySQLCapabilityFlag {
         self.capability_flags
     }
 
@@ -466,7 +476,7 @@ impl MySQLHandshakeResponse41Packet {
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeResponse41Packet {
     fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
-        this.capability_flags = payload.get_uint_le(4) as u32;
+        this.capability_flags = MySQLCapabilityFlag::from_bits(payload.get_uint_le(4) as u32).unwrap();
         this.max_packet_size = payload.get_uint_le(4) as u32;
         this.character_set = (payload.get_uint(1) & 0xff) as u8;
         payload.advance(23);
@@ -474,22 +484,22 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLHandshakeRes
         // string with nul
         this.user_name = payload.get_string_nul();
 
-        this.auth_response = if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientPluginAuthLenencClientData as u32) {
+        this.auth_response = if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA) {
             payload.get_string_lenenc()
-        } else if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientSecureConnection as u32) {
+        } else if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_SECURE_CONNECTION) {
             payload.get_string_fix()
         } else {
             let auth = payload.get_string_nul();
             auth.into_bytes()
         };
 
-        this.database = if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientConnectWithDb as u32) {
+        this.database = if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_CONNECT_WITH_DB) {
             payload.get_string_nul()
         } else {
             String::from("")
         };
 
-        this.auth_plugin_name = if 0 != (this.capability_flags & MySQLCapabilityFlag::ClientPluginAuth as u32) {
+        this.auth_plugin_name = if this.capability_flags.contains(MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH) {
             payload.get_string_nul()
         } else {
             String::from("")
@@ -634,6 +644,56 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLOKPacket {
 }
 
 impl MySQLPacket for MySQLOKPacket {
+    fn get_sequence_id(&self) -> u32 {
+        self.sequence_id
+    }
+}
+
+/**
+ * ERR packet protocol for MySQL.
+ *
+ * @see <a href="https://dev.mysql.com/doc/internals/en/packet-ERR_Packet.html">ERR Packet</a>
+ */
+pub struct MySQLErrPacket {
+    /**
+     * Header of ERR packet.
+     */
+    header: u8, // 0xff;
+    sql_state_marker: String, // "#";
+    sequence_id: u32,
+    error_code: u32,
+    sql_state: String,
+    error_message: String
+}
+
+impl MySQLErrPacket {
+    pub fn new(sequence_id: u32, error_code: u32, sql_state: String, error_message: String) -> Self {
+        MySQLErrPacket {
+            header: 0xff,
+            sql_state_marker: "#".to_string(),
+            sequence_id,
+            error_code: 0,
+            sql_state: sql_state,
+            error_message: error_message
+        }
+    }
+}
+
+impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload> for MySQLErrPacket {
+    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+        payload.put_u8(this.get_sequence_id() as u8); // seq
+        payload.put_u8(this.header);
+
+        payload.put_u16_le(this.error_code as u16);
+        payload.put_slice(this.sql_state_marker.as_bytes());
+        payload.put_slice(this.sql_state.as_bytes());
+        payload.put_slice(this.error_message.as_bytes());
+
+        payload
+    }
+}
+
+impl MySQLPacket for MySQLErrPacket {
     fn get_sequence_id(&self) -> u32 {
         self.sequence_id
     }

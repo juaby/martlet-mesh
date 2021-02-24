@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
 use crate::protocol::database::mysql::packet::generate_random_bytes;
 
+#[derive(Debug)]
 pub struct SessionContext {
     id: u64,
     authorized: bool,
@@ -88,9 +89,11 @@ impl SessionContext {
     }
 
     pub fn clear_prepare_stmt_ctx(&mut self, statement_id: u64) {
-        let sql = String::from_utf8_lossy(self.get_prepare_stmt_ctx_by_id(statement_id).unwrap().get_sql().as_slice()).to_string();
-        self.prepare_stmt_ctx_id.remove(&*sql);
-        self.prepare_stmt_ctx_map.remove(&statement_id);
+        if let Some(prepare_stmt_ctx) = self.get_prepare_stmt_ctx_by_id(statement_id) {
+            let sql = String::from_utf8_lossy(prepare_stmt_ctx.get_sql().as_slice()).to_string();
+            self.prepare_stmt_ctx_id.remove(&*sql);
+            self.prepare_stmt_ctx_map.remove(&statement_id);
+        }
     }
 
     pub fn get_prepare_parameters_count(&self, statement_id: u64) -> u16 {
@@ -130,6 +133,7 @@ impl SessionContext {
     }
 }
 
+#[derive(Debug)]
 pub struct PrepareStatementContext {
     statement_id: u64,
     parameters_count: u16,

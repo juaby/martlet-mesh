@@ -97,27 +97,38 @@ impl<'a> IOContext<'a> {
         let command_packet_type = 0u8;
         let header = MySQLPacketHeader::new(len, sequence_id, command_packet_type, self.id);
 
-        match self.session_ctx.get_connection_phase() {
-            MySQLConnectionPhase::INITIAL_HANDSHAKE => {},
+        let connection_phase_status = match self.session_ctx.get_connection_phase() {
+            MySQLConnectionPhase::INITIAL_HANDSHAKE => { Ok(()) },
             MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => {
                 let handshake_response41_payload = MySQLPacketPayload::new_with_payload(payload);
                 if let Some(payloads) = AuthPhaseFastPathHandler::handle(Some(header), Some(handshake_response41_payload), &mut self.session_ctx) {
                     self.channel.send(Option::from(payloads)).await;
                 }
-            },
+                if self.session_ctx.get_connection_phase() == MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH {
+                    Err(())
+                } else {
+                    Ok(())
+                }
+            }
             MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => {
                 let mut auth_switch_response_payload = MySQLPacketPayload::new_with_payload(payload);
                 AuthMethodMismatchHandler::handle(Some(header), Some(auth_switch_response_payload), &mut self.session_ctx);
+                Ok(())
             }
+        };
+
+        if let Ok(()) = connection_phase_status {
+            // TODO login
+            println!("session = {:?}", self.session_ctx);
+
+            let mut ok_packet = MySQLOKPacket::new(sequence_id + 1, 0, 0);
+            let mut ok_payload = MySQLPacketPayload::new();
+            let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
+            self.channel.send(Some(vec![ok_payload.get_payload()])).await;
+
+            self.session_ctx.set_authorized(true);
         }
-
-        // TODO login
-
-        let mut ok_packet = MySQLOKPacket::new(sequence_id + 1, 0, 0);
-        let mut ok_payload = MySQLPacketPayload::new();
-        let ok_payload = DatabasePacket::encode(&mut ok_packet, &mut ok_payload);
-
-        self.channel.send(Some(vec![ok_payload.get_payload()])).await
+        Ok(())
     }
 
     pub async fn check_process_command_packet(&mut self, mut payload: BytesMut) {
@@ -131,23 +142,21 @@ impl<'a> IOContext<'a> {
         }
     }
 
-    pub async fn receive(&mut self, authorized: bool) {
+    pub async fn receive(&mut self) {
         if let Err(e) = self.handshake().await {
             println!("error on sending Handshake Packet response; error = {:?}", e);
         }
-        let mut authorized = authorized;
         // Here for every line we get back from the `Framed` decoder,
         // we parse the request, and if it's valid we generate a response
         // based on the values in the database.
         while let Some(result) = self.channel.stream.next().await {
             match result {
                 Ok(payload) => {
-                    if !authorized {
+                    if !self.session_ctx.get_authorized() {
                         if let Err(e) = self.auth(payload).await {
                             println!("error on sending response; error = {:?}", e);
                         }
-                        authorized = true; // 小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
-                        self.session_ctx.set_authorized(authorized);
+                        // 小鱼在水里活泼乱跳 闫圣哲 王茹玉 毛毛虫 人类 电脑
                     } else {
                         self.check_process_command_packet(payload).await;
                     }

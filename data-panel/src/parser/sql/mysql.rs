@@ -16,6 +16,7 @@ impl Dialect for MySqlDialect {
             || ch == '$'
             || ch == '@'
             || ch == '?'
+            || ch == '`'
             || (ch >= '\u{0080}' && ch <= '\u{ffff}')
     }
 
@@ -28,6 +29,24 @@ pub fn parser(sql: String) -> Vec<Statement> {
     let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
 
     let ast = if sql.to_uppercase().starts_with("SET NAMES") {
+        vec![Statement::SetVariable {
+            local: false,
+            variable: Ident { value: "".to_string(), quote_style: None },
+            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+        }]
+    } else if sql.to_uppercase().starts_with("SET SESSION") {
+        vec![Statement::SetVariable {
+            local: false,
+            variable: Ident { value: "".to_string(), quote_style: None },
+            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+        }]
+    } else if sql.to_uppercase().starts_with("USE ") {
+        vec![Statement::SetVariable {
+            local: false,
+            variable: Ident { value: "".to_string(), quote_style: None },
+            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+        }]
+    } else if sql.to_uppercase().starts_with("SAVEPOINT ") {
         vec![Statement::SetVariable {
             local: false,
             variable: Ident { value: "".to_string(), quote_style: None },

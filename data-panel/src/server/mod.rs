@@ -22,5 +22,5 @@ pub async fn handle(mut socket: TcpStream) {
     // as well as convert our line based responses into a stream of bytes.
 
     let mut io_ctx = IOContext::new(io_context_id(), &mut socket);
-    io_ctx.receive(false).await;
+    io_ctx.receive().await;
 }
