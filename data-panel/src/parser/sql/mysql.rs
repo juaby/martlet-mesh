@@ -52,6 +52,12 @@ pub fn parser(sql: String) -> Vec<Statement> {
             variable: Ident { value: "".to_string(), quote_style: None },
             value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
         }]
+    } else if sql.to_uppercase().starts_with("ROLLBACK TO ") {
+        vec![Statement::SetVariable {
+            local: false,
+            variable: Ident { value: "".to_string(), quote_style: None },
+            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+        }]
     } else {
         Parser::parse_sql(&dialect, &sql).unwrap()
     };
