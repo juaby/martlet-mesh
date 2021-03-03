@@ -61,6 +61,9 @@ impl SQLAnalyse for SetExpr {
             SetExpr::Values(v) => {
                 v.analyse(ctx)?;
             },
+            SetExpr::Insert(v) => {
+                v.analyse(ctx)?;
+            },
             SetExpr::SetOperation {
                 left,
                 right,
@@ -97,6 +100,11 @@ impl SQLAnalyse for SetOperator {
 impl SQLAnalyse for Select {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         // write!(f, "SELECT{}", if self.distinct { " DISTINCT" } else { "" })?;
+        if let Some(ref top) = self.top {
+            // write!(f, " ")?;
+            top.analyse(ctx)?;
+        }
+        // write!(f, " ")?;
         display_comma_separated(&self.projection).analyse(ctx)?;
         if !self.from.is_empty() {
             // write!(f, " FROM ")?;

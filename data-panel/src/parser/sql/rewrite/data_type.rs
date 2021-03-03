@@ -89,6 +89,9 @@ impl SQLReWrite for DataType {
             DataType::Text => {
                 write!(f, "TEXT")?;
             },
+            DataType::String => {
+                write!(f, "STRING")?;
+            }
             DataType::Bytea => {
                 write!(f, "BYTEA")?;
             },
@@ -98,7 +101,7 @@ impl SQLReWrite for DataType {
             },
             DataType::Custom(ty) => {
                 ty.rewrite(f, ctx)?;
-            },
+            }
         };
         Ok(())
     }

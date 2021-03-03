@@ -14,7 +14,7 @@ tokio-util = { version = "0.6", features = ["full"] }
 tokio-stream = "0.1"
 bytes = "1.0"
 
-sqlparser = "0.7"
+sqlparser = "0.8"
 # sqlx = { version = "0.4", default-features = false, features = [ "runtime-tokio", "tls", "mysql", "postgres", "bigdecimal", "json", "chrono", "ipnetwork", "uuid" ]}
 # sqlx = { version = "0.4", default-features = false, features = [ "runtime-tokio", "macros", "all" ]}
 mysql = "20.1"

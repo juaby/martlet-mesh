@@ -24,6 +24,21 @@ pub type SRWResult = crate::common::Result<()>;
 impl SQLReWrite for AlterTableOperation {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
+            AlterTableOperation::AddPartitions {
+                if_not_exists,
+                new_partitions,
+            } => {
+                write!(
+                    f,
+                    "ADD{ine} PARTITION (",
+                    ine = if *if_not_exists { " IF NOT EXISTS" } else { "" }
+                )?;
+                display_comma_separated(new_partitions).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
+                )?;
+            },
             AlterTableOperation::AddConstraint(c) => {
                 write!(f, "ADD ")?;
                 c.rewrite(f, ctx)?;
@@ -32,6 +47,21 @@ impl SQLReWrite for AlterTableOperation {
                 write!(f, "ADD COLUMN ")?;
                 column_def.rewrite(f, ctx)?;
             }
+            AlterTableOperation::DropPartitions {
+                partitions,
+                if_exists,
+            } => {
+                write!(
+                    f,
+                    "DROP{ie} PARTITION (",
+                    ie = if *if_exists { " IF EXISTS" } else { "" }
+                )?;
+                display_comma_separated(partitions).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
+                )?;
+            },
             AlterTableOperation::DropConstraint { name } => {
                 write!(f, "DROP CONSTRAINT ")?;
                 name.rewrite(f, ctx)?;
@@ -51,6 +81,25 @@ impl SQLReWrite for AlterTableOperation {
                     f,
                     "{}",
                     if *cascade { " CASCADE" } else { "" }
+                )?;
+            },
+            AlterTableOperation::RenamePartitions {
+                old_partitions,
+                new_partitions,
+            } => {
+                write!(
+                    f,
+                    "PARTITION ("
+                )?;
+                display_comma_separated(old_partitions).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ") RENAME TO PARTITION ("
+                )?;
+                display_comma_separated(new_partitions).rewrite(f, ctx)?;
+                write!(
+                    f,
+                    ")"
                 )?;
             },
             AlterTableOperation::RenameColumn {

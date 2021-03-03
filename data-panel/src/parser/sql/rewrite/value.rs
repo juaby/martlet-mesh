@@ -24,8 +24,11 @@ pub type SRWResult = crate::common::Result<()>;
 impl SQLReWrite for Value {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         match self {
-            Value::Number(v) => {
-                write!(f, "{}", v)?;
+            Value::Number(v, l) => {
+                write!(f, "{}{long}", v, long = if *l { "L" } else { "" })?;
+            },
+            Value::DoubleQuotedString(v) => {
+                write!(f, "\"{}\"", v)?;
             },
             Value::SingleQuotedString(v) => {
                 write!(f, "'")?;

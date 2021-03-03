@@ -262,9 +262,8 @@ impl CommandHandler<MySQLPacketPayload> for ComStmtExecuteHandler {
                 }
             },
             Statement::SetVariable{
-                local:_,
-                variable:_,
-                value:_,} => {
+                local, hivevar, variable, value
+            } => {
 
                 // This query will emit two result sets.
                 let mut result = conn.query_iter(sql).unwrap();

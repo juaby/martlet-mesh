@@ -18,7 +18,7 @@ mod operator;
 mod query;
 mod value;
 
-use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, Ident, FunctionArg, UnaryOperator, ListAggOnOverflow, ListAgg};
+use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, Ident, FunctionArg, UnaryOperator, ListAggOnOverflow, ListAgg, HiveDistributionStyle, HiveFormat, HiveRowFormat, HiveIOFormat, AddDropSync, SqliteOnConflict};
 use std::fmt::Write;
 use std::collections::HashMap;
 use sqlparser::tokenizer::{Token, Word, Whitespace};
@@ -102,6 +102,10 @@ impl SQLReWrite for Expr {
         match self {
             Expr::Identifier(s) => {
                 s.rewrite(f, ctx)?;
+            },
+            Expr::MapAccess { column, key } => {
+                column.rewrite(f, ctx)?;
+                write!(f, "[\"{}\"]", key)?;
             },
             Expr::Wildcard => {
                 f.write_str("*")?;
@@ -264,6 +268,24 @@ impl SQLReWrite for Expr {
             Expr::ListAgg(listagg) => {
                 listagg.rewrite(f, ctx)?;
             },
+            Expr::Substring {
+                expr,
+                substring_from,
+                substring_for,
+            } => {
+                write!(f, "SUBSTRING(")?;
+                expr.rewrite(f, ctx)?;
+                if let Some(from_part) = substring_from {
+                    write!(f, " FROM ")?;
+                    from_part.rewrite(f, ctx)?;
+                }
+                if let Some(from_part) = substring_for {
+                    write!(f, " FOR ")?;
+                    from_part.rewrite(f, ctx)?;
+                }
+
+                write!(f, ")")?;
+            }
         };
         Ok(())
     }
@@ -342,6 +364,17 @@ impl SQLReWrite for WindowFrameBound {
     }
 }
 
+impl SQLReWrite for AddDropSync {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        match self {
+            AddDropSync::SYNC => f.write_str("SYNC PARTITIONS"),
+            AddDropSync::DROP => f.write_str("DROP PARTITIONS"),
+            AddDropSync::ADD => f.write_str("ADD PARTITIONS"),
+        }?;
+        Ok(())
+    }
+}
+
 /// A top-level statement (SELECT, INSERT, CREATE, etc.)
 impl SQLReWrite for Statement {
     // Clippy thinks this function is too complicated, but it is painful to
@@ -366,24 +399,124 @@ impl SQLReWrite for Statement {
 
                 statement.rewrite(f, ctx)?;
             }
-            Statement::Analyze { table_name } => {
-                write!(f, "ANALYZE TABLE ")?;
-                table_name.rewrite(f, ctx)?;
-            },
             Statement::Query(s) => {
                 s.rewrite(f, ctx)?;
             },
-            Statement::Insert {
-                table_name,
-                columns,
+            Statement::Directory {
+                overwrite,
+                local,
+                path,
+                file_format,
                 source,
             } => {
-                write!(f, "INSERT INTO ")?;
+                write!(
+                    f,
+                    "INSERT{overwrite}{local} DIRECTORY '{path}'",
+                    overwrite = if *overwrite { " OVERWRITE" } else { "" },
+                    local = if *local { " LOCAL" } else { "" },
+                    path = path
+                )?;
+                if let Some(ref ff) = file_format {
+                    write!(f, " STORED AS ")?;
+                    ff.rewrite(f, ctx)?;
+                }
+                source.rewrite(f, ctx)?;
+            }
+            Statement::Msck {
+                table_name,
+                repair,
+                partition_action,
+            } => {
+                write!(
+                    f,
+                    "MSCK {repair}TABLE ",
+                    repair = if *repair { "REPAIR " } else { "" },
+                )?;
                 table_name.rewrite(f, ctx)?;
-                write!(f, " ")?;
+                if let Some(pa) = partition_action {
+                    write!(f, " ")?;
+                    pa.rewrite(f, ctx)?; // TODO
+                }
+            }
+            Statement::Truncate {
+                table_name,
+                partitions,
+            } => {
+                write!(f, "TRUNCATE TABLE ")?;
+                table_name.rewrite(f, ctx)?;
+                if let Some(ref parts) = partitions {
+                    if !parts.is_empty() {
+                        write!(f, " PARTITION (")?;
+                        display_comma_separated(parts).rewrite(f, ctx)?;
+                        write!(f, ")")?;
+                    }
+                }
+            }
+            Statement::Analyze { table_name, partitions, for_columns, columns, cache_metadata, noscan, compute_statistics } => {
+                write!(f, "ANALYZE TABLE ")?;
+                table_name.rewrite(f, ctx)?;
+
+                if let Some(ref parts) = partitions {
+                    if !parts.is_empty() {
+                        write!(f, " PARTITION (")?;
+                        display_comma_separated(parts).rewrite(f, ctx)?;
+                        write!(f, ")")?;
+                    }
+                }
+
+                if *compute_statistics {
+                    write!(f, " COMPUTE STATISTICS")?;
+                }
+                if *noscan {
+                    write!(f, " NOSCAN")?;
+                }
+                if *cache_metadata {
+                    write!(f, " CACHE METADATA")?;
+                }
+                if *for_columns {
+                    write!(f, " FOR COLUMNS")?;
+                    if !columns.is_empty() {
+                        write!(f, " ")?;
+                        display_comma_separated(columns).rewrite(f, ctx)?;
+                    }
+                }
+            },
+            Statement::Insert {
+                or, table_name,
+                columns,
+                overwrite, source, partitioned, after_columns, table,
+            } => {
+                if let Some(action) = or {
+                    write!(f, "INSERT OR ")?;
+                    action.rewrite(f, ctx)?; // TODO
+                    write!(f, " INTO ")?;
+                    table_name.rewrite(f, ctx)?;
+                    write!(f, " ")?;
+                } else {
+                    write!(
+                        f,
+                        "INSERT {act}{tbl} ",
+                        act = if *overwrite { "OVERWRITE" } else { "INTO" },
+                        tbl = if *table { " TABLE" } else { "" }
+                    )?;
+                    table_name.rewrite(f, ctx)?;
+                    write!(f, " ")?;
+                }
                 if !columns.is_empty() {
                     write!(f, "(")?;
                     display_comma_separated(columns).rewrite(f, ctx)?;
+                    write!(f, ") ")?;
+                }
+                if let Some(ref parts) = partitioned {
+                    if !parts.is_empty() {
+                        write!(f, "PARTITION (")?;
+                        display_comma_separated(parts).rewrite(f, ctx)?;
+                        write!(f, ") ")?;
+                    }
+                }
+                if !after_columns.is_empty() {
+                    write!(f, "(")?;
+                    display_comma_separated(after_columns).rewrite(f, ctx)?;
                     write!(f, ") ")?;
                 }
                 source.rewrite(f, ctx)?;
@@ -443,6 +576,25 @@ impl SQLReWrite for Statement {
                     selection.rewrite(f, ctx)?;
                 }
             }
+            Statement::CreateDatabase {
+                db_name,
+                if_not_exists,
+                location,
+                managed_location,
+            } => {
+                write!(f, "CREATE")?;
+                if *if_not_exists {
+                    write!(f, " IF NOT EXISTS")?;
+                }
+                write!(f, " ")?;
+                db_name.rewrite(f, ctx)?;
+                if let Some(l) = location {
+                    write!(f, " LOCATION '{}'", l)?;
+                }
+                if let Some(ml) = managed_location {
+                    write!(f, " MANAGEDLOCATION '{}'", ml)?;
+                }
+            }
             Statement::CreateView {
                 or_replace,
                 name,
@@ -472,17 +624,17 @@ impl SQLReWrite for Statement {
                 query.rewrite(f, ctx)?;
             }
             Statement::CreateTable {
-                name,
+                temporary, name,
                 columns,
                 constraints,
-                with_options,
+                hive_distribution, hive_formats, table_properties, with_options,
                 or_replace,
                 if_not_exists,
                 external,
                 file_format,
                 location,
                 query,
-                without_rowid,
+                without_rowid, like,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -515,6 +667,102 @@ impl SQLReWrite for Statement {
                 if *without_rowid {
                     write!(f, " WITHOUT ROWID")?;
                 }
+
+                // Only for Hive
+                if let Some(l) = like {
+                    write!(f, " LIKE ")?;
+                    l.rewrite(f, ctx)?;
+                }
+                match hive_distribution {
+                    HiveDistributionStyle::PARTITIONED { columns } => {
+                        write!(f, " PARTITIONED BY (")?;
+                        display_comma_separated(&columns).rewrite(f, ctx)?;
+                        write!(f, ")")?;
+                    }
+                    HiveDistributionStyle::CLUSTERED {
+                        columns,
+                        sorted_by,
+                        num_buckets,
+                    } => {
+                        write!(f, " CLUSTERED BY (")?;
+                        display_comma_separated(&columns).rewrite(f, ctx)?;
+                        write!(f, ")")?;
+                        if !sorted_by.is_empty() {
+                            write!(f, " SORTED BY (")?;
+                            display_comma_separated(&sorted_by).rewrite(f, ctx)?;
+                            write!(f, ")")?;
+                        }
+                        if *num_buckets > 0 {
+                            write!(f, " INTO {} BUCKETS", num_buckets)?;
+                        }
+                    }
+                    HiveDistributionStyle::SKEWED {
+                        columns,
+                        on,
+                        stored_as_directories,
+                    } => {
+                        write!(
+                            f,
+                            " SKEWED BY ("
+                        )?;
+                        display_comma_separated(&columns).rewrite(f, ctx)?;
+                        write!(
+                            f,
+                            ")) ON ("
+                        )?;
+                        display_comma_separated(&on).rewrite(f, ctx)?;
+                        write!(
+                            f,
+                            ")"
+                        )?;
+                        if *stored_as_directories {
+                            write!(f, " STORED AS DIRECTORIES")?;
+                        }
+                    }
+                    _ => (), // TODO
+                }
+
+                if let Some(HiveFormat {
+                                row_format,
+                                storage,
+                                location,
+                            }) = hive_formats
+                {
+                    match row_format {
+                        Some(HiveRowFormat::SERDE { class }) => {
+                            write!(f, " ROW FORMAT SERDE '{}'", class)?
+                        }
+                        Some(HiveRowFormat::DELIMITED) => write!(f, " ROW FORMAT DELIMITED")?,
+                        None => (),
+                    }
+                    match storage {
+                        Some(HiveIOFormat::IOF {
+                                 input_format,
+                                 output_format,
+                             }) => {
+                            write!(
+                                f,
+                                " STORED AS INPUTFORMAT "
+                            )?;
+                            input_format.rewrite(f, ctx)?;
+                            write!(
+                                f,
+                                " OUTPUTFORMAT "
+                            )?;
+                            output_format.rewrite(f, ctx)?;
+                        },
+                        Some(HiveIOFormat::FileFormat { format }) if !*external => {
+                            write!(f, " STORED AS ")?;
+                            format.rewrite(f, ctx)?;
+                        }
+                        _ => (),
+                    }
+                    if !*external {
+                        if let Some(loc) = location {
+                            write!(f, " LOCATION '{}'", loc)?;
+                        }
+                    }
+                }
                 if *external {
                     write!(
                         f,
@@ -531,13 +779,24 @@ impl SQLReWrite for Statement {
                         "'"
                     )?;
                 }
+                if !table_properties.is_empty() {
+                    write!(
+                        f,
+                        " TBLPROPERTIES ("
+                    )?;
+                    display_comma_separated(table_properties).rewrite(f, ctx)?;
+                    write!(
+                        f,
+                        ")"
+                    )?;
+                }
                 if !with_options.is_empty() {
                     write!(f, " WITH (")?;
                     display_comma_separated(with_options).rewrite(f, ctx)?;
                     write!(f, ")")?;
                 }
                 if let Some(query) = query {
-                    write!(f, " AS ",)?;
+                    write!(f, " AS ")?;
                     query.rewrite(f, ctx)?;
                 }
             }
@@ -603,7 +862,7 @@ impl SQLReWrite for Statement {
                 object_type,
                 if_exists,
                 names,
-                cascade,
+                cascade, purge,
             } => {
                 write!(
                     f,
@@ -618,26 +877,35 @@ impl SQLReWrite for Statement {
                 display_comma_separated(names).rewrite(f, ctx)?;
                 write!(
                     f,
-                    "{}",
-                    if *cascade { " CASCADE" } else { "" }
+                    "{}{}",
+                    if *cascade { " CASCADE" } else { "" },
+                    if *purge { " PURGE" } else { "" }
                 )?;
             },
             Statement::SetVariable {
                 local,
-                variable,
+                hivevar, variable,
                 value,
             } => {
                 f.write_str("SET ")?;
                 if *local {
                     f.write_str("LOCAL ")?;
                 }
+                write!(
+                    f,
+                    "{hivevar}",
+                    hivevar = if *hivevar { "HIVEVAR:" } else { "" }
+                )?;
                 variable.rewrite(f, ctx)?;
                 write!(f, " = ")?;
-                value.rewrite(f, ctx)?;
+                display_comma_separated(value).rewrite(f, ctx)?;
             }
             Statement::ShowVariable { variable } => {
                 write!(f, "SHOW ")?;
-                variable.rewrite(f, ctx)?;
+                if !variable.is_empty() {
+                    write!(f, " ")?;
+                    display_separated(variable, " ").rewrite(f, ctx)?;
+                }
             },
             Statement::ShowColumns {
                 extended,
@@ -944,7 +1212,21 @@ impl SQLReWrite for SetVariableValue {
             Literal(literal) => {
                 literal.rewrite(f, ctx)?;
             }
-        }
+        };
+        Ok(())
+    }
+}
+
+impl SQLReWrite for SqliteOnConflict {
+    fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
+        use SqliteOnConflict::*;
+        match self {
+            Rollback => write!(f, "ROLLBACK"),
+            Abort => write!(f, "ABORT"),
+            Fail => write!(f, "FAIL"),
+            Ignore => write!(f, "IGNORE"),
+            Replace => write!(f, "REPLACE"),
+        };
         Ok(())
     }
 }
@@ -956,7 +1238,7 @@ impl SQLReWrite for Token {
             Token::Word(ref w) => {
                 w.rewrite(f, ctx)?;
             },
-            Token::Number(ref n) => f.write_str(n)?,
+            Token::Number(ref n, l) => write!(f, "{}{long}", n, long = if *l { "L" } else { "" })?,
             Token::Char(ref c) => write!(f, "{}", c)?,
             Token::SingleQuotedString(ref s) => write!(f, "'{}'", s)?,
             Token::NationalStringLiteral(ref s) => write!(f, "N'{}'", s)?,
@@ -965,6 +1247,8 @@ impl SQLReWrite for Token {
             Token::Whitespace(ws) => {
                 ws.rewrite(f, ctx)?;
             },
+            Token::DoubleEq => f.write_str("==")?,
+            Token::Spaceship => f.write_str("<=>")?,
             Token::Eq => f.write_str("=")?,
             Token::Neq => f.write_str("<>")?,
             Token::Lt => f.write_str("<")?,

@@ -61,6 +61,9 @@ impl SQLReWrite for SetExpr {
             SetExpr::Values(v) => {
                 v.rewrite(f, ctx)?;
             },
+            SetExpr::Insert(v) => {
+                v.rewrite(f, ctx)?;
+            },
             SetExpr::SetOperation {
                 left,
                 right,

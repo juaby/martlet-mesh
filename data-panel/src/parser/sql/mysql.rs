@@ -31,32 +31,37 @@ pub fn parser(sql: String) -> Vec<Statement> {
     let ast = if sql.to_uppercase().starts_with("SET NAMES") {
         vec![Statement::SetVariable {
             local: false,
+            hivevar: false,
             variable: Ident { value: "".to_string(), quote_style: None },
-            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+            value: vec![]
         }]
     } else if sql.to_uppercase().starts_with("SET SESSION") {
         vec![Statement::SetVariable {
             local: false,
+            hivevar: false,
             variable: Ident { value: "".to_string(), quote_style: None },
-            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+            value: vec![]
         }]
     } else if sql.to_uppercase().starts_with("USE ") {
         vec![Statement::SetVariable {
             local: false,
+            hivevar: false,
             variable: Ident { value: "".to_string(), quote_style: None },
-            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+            value: vec![]
         }]
     } else if sql.to_uppercase().starts_with("SAVEPOINT ") {
         vec![Statement::SetVariable {
             local: false,
+            hivevar: false,
             variable: Ident { value: "".to_string(), quote_style: None },
-            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+            value: vec![]
         }]
     } else if sql.to_uppercase().starts_with("ROLLBACK TO ") {
         vec![Statement::SetVariable {
             local: false,
+            hivevar: false,
             variable: Ident { value: "".to_string(), quote_style: None },
-            value: SetVariableValue::Ident { 0: Ident { value: "".to_string(), quote_style: None } }
+            value: vec![]
         }]
     } else {
         Parser::parse_sql(&dialect, &sql).unwrap()

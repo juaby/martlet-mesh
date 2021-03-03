@@ -89,6 +89,9 @@ impl SQLAnalyse for DataType {
             DataType::Text => {
                 // write!(f, "TEXT")?;
             },
+            DataType::String => {
+                // write!(f, "STRING")?;
+            },
             DataType::Bytea => {
                 // write!(f, "BYTEA")?;
             },

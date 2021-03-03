@@ -24,8 +24,11 @@ pub type SAResult = crate::common::Result<()>;
 impl SQLAnalyse for Value {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
         match self {
-            Value::Number(v) => {
-                // write!(f, "{}", v)?;
+            Value::Number(v, l) => {
+                // write!(f, "{}{long}", v, long = if *l { "L" } else { "" })?;
+            },
+            Value::DoubleQuotedString(v) => {
+                // write!(f, "\"{}\"", v)?;
             },
             Value::SingleQuotedString(v) => {
                 // write!(f, "'")?;

@@ -50,6 +50,7 @@ impl SQLReWrite for BinaryOperator {
             BinaryOperator::Lt => "<",
             BinaryOperator::GtEq => ">=",
             BinaryOperator::LtEq => "<=",
+            BinaryOperator::Spaceship => "<=>",
             BinaryOperator::Eq => "=",
             BinaryOperator::NotEq => "<>",
             BinaryOperator::And => "AND",

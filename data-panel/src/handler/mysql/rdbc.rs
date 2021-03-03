@@ -48,13 +48,13 @@ fn text_query_success(mut payloads: Vec<Bytes>, results: QueryResult<Text>, stat
         Statement::ShowColumns { extended, full, table_name, filter } => {
             payloads = query_result(payloads, results);
         },
-        Statement::SetVariable{ local, variable, value } => {
+        Statement::SetVariable{ local, hivevar, variable, value } => {
             payloads = update_result(payloads, results);
         }
         Statement::Insert { .. } => {
             payloads = update_result(payloads, results);
         }
-        Statement::Copy { .. }|Statement::Update { .. } => {
+        Statement::Copy { .. } => {
             payloads = update_result(payloads, results);
         }
         Statement::Update { .. } => {
@@ -113,6 +113,18 @@ fn text_query_success(mut payloads: Vec<Bytes>, results: QueryResult<Text>, stat
         }
         Statement::Analyze { .. } => {
             payloads = query_result(payloads, results);
+        }
+        Statement::Truncate { .. } => {
+            payloads = update_result(payloads, results);
+        }
+        Statement::Msck { .. } => {
+            payloads = update_result(payloads, results);
+        }
+        Statement::Directory { .. } => {
+            payloads = update_result(payloads, results);
+        }
+        Statement::CreateDatabase { .. } => {
+            payloads = update_result(payloads, results);
         }
     }
     payloads
