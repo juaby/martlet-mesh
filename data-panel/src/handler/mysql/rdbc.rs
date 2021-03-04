@@ -126,6 +126,18 @@ fn text_query_success(mut payloads: Vec<Bytes>, results: QueryResult<Text>, stat
         Statement::CreateDatabase { .. } => {
             payloads = update_result(payloads, results);
         }
+        Statement::UseDatabase { .. } => {
+            payloads = update_result(payloads, results);
+        }
+        Statement::SetNames { .. } => {
+            payloads = update_result(payloads, results);
+        }
+        Statement::Savepoint { .. } => {
+            payloads = update_result(payloads, results);
+        }
+        Statement::Release { .. } => {
+            payloads = update_result(payloads, results);
+        }
     }
     payloads
 }

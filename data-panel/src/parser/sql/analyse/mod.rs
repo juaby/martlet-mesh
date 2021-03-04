@@ -910,6 +910,10 @@ impl SQLAnalyse for Statement {
                     display_separated(variable, " ").analyse(ctx)?;
                 }
             },
+            Statement::UseDatabase { variable } => {
+                // write!(f, "USE ")?;
+                variable.analyse(ctx)?;
+            }
             Statement::ShowColumns {
                 extended,
                 full,
@@ -935,18 +939,35 @@ impl SQLAnalyse for Statement {
                     display_comma_separated(modes).analyse(ctx)?;
                 }
             }
-            Statement::SetTransaction { modes } => {
-                // write!(f, "SET TRANSACTION")?;
+            Statement::SetTransaction { session, modes } => {
+                // write!(f, "SET{} TRANSACTION", if *session { " SESSION" } else { "" })?;
                 if !modes.is_empty() {
                     // write!(f, " ")?;
                     display_comma_separated(modes).analyse(ctx)?;
                 }
             }
+            Statement::SetNames { variable } => {
+                // write!(f, "SET NAMES ")?;
+                variable.analyse(ctx)?;
+            }
             Statement::Commit { chain } => {
                 // write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" },)?;
             }
-            Statement::Rollback { chain } => {
-                // write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+            Statement::Savepoint { variable } => {
+                // write!(f, "SAVEPOINT ")?;
+                variable.analyse(ctx)?;
+            }
+            Statement::Rollback { chain, savepoint } => {
+                if let Some(savepoint) = savepoint {
+                    // write!(f, "ROLLBACK TO SAVEPOINT ")?;
+                    savepoint.analyse(ctx)?;
+                } else {
+                    // write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+                }
+            }
+            Statement::Release { variable } => {
+                // write!(f, "RELEASE SAVEPOINT ")?;
+                variable.analyse(ctx)?;
             }
             Statement::CreateSchema {
                 schema_name,

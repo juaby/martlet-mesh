@@ -907,6 +907,10 @@ impl SQLReWrite for Statement {
                     display_separated(variable, " ").rewrite(f, ctx)?;
                 }
             },
+            Statement::UseDatabase { variable } => {
+                write!(f, "USE ")?;
+                variable.rewrite(f, ctx)?;
+            }
             Statement::ShowColumns {
                 extended,
                 full,
@@ -932,18 +936,35 @@ impl SQLReWrite for Statement {
                     display_comma_separated(modes).rewrite(f, ctx)?;
                 }
             }
-            Statement::SetTransaction { modes } => {
-                write!(f, "SET TRANSACTION")?;
+            Statement::SetTransaction { session, modes } => {
+                write!(f, "SET{} TRANSACTION", if *session { " SESSION" } else { "" })?;
                 if !modes.is_empty() {
                     write!(f, " ")?;
                     display_comma_separated(modes).rewrite(f, ctx)?;
                 }
             }
+            Statement::SetNames { variable } => {
+                write!(f, "SET NAMES ")?;
+                variable.rewrite(f, ctx)?;
+            }
             Statement::Commit { chain } => {
                 write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" },)?;
             }
-            Statement::Rollback { chain } => {
-                write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+            Statement::Savepoint { variable } => {
+                write!(f, "SAVEPOINT ")?;
+                variable.rewrite(f, ctx)?;
+            }
+            Statement::Rollback { chain, savepoint } => {
+                if let Some(savepoint) = savepoint {
+                    write!(f, "ROLLBACK TO SAVEPOINT ")?;
+                    savepoint.rewrite(f, ctx)?;
+                } else {
+                    write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+                }
+            }
+            Statement::Release { variable } => {
+                write!(f, "RELEASE SAVEPOINT ")?;
+                variable.rewrite(f, ctx)?;
             }
             Statement::CreateSchema {
                 schema_name,
