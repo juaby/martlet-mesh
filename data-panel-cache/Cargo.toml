@@ -1,0 +1,62 @@
+[package]
+name = "data-panel-cache"
+version = "0.1.0"
+authors = ["AlphaPo <juaby@163.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+#[lib]
+#name = "data-panel-cache"
+#path = "src/lib.rs"
+
+[dependencies]
+
+data-panel-common = { path = "../data-panel-common", version = "0.1.0-SNAPSHOT" }
+
+futures = "0.3"
+tokio = { version = "1.1", features = ["full"] }
+tokio-util = { version = "0.6", features = ["full"] }
+tokio-stream = "0.1"
+bytes = "1.0"
+
+# sqlparser = "0.8"
+sqlparser = { git = "https://github.com/juaby/sqlparser-rs", branch = "po/mysql"}
+# sqlx = { version = "0.4", default-features = false, features = [ "runtime-tokio", "tls", "mysql", "postgres", "bigdecimal", "json", "chrono", "ipnetwork", "uuid" ]}
+# sqlx = { version = "0.4", default-features = false, features = [ "runtime-tokio", "macros", "all" ]}
+mysql = "20.1"
+# mysql_async = "0.26"
+# r2d2 = "0.8"
+# r2d2_mysql = "18.0"
+mysqlbinlog = "0.1.5"
+
+rand = "0.8.2"
+bitflags = "1.2.1"
+byteorder = "1.4.2"
+
+hyper = "0.14"
+serde_json = "1.0.61"
+chrono = "0.4.19"
+
+log = "0.4.13"
+env_logger = "0.8.2"
+
+clap = { version = "2.33", features = ["yaml"] }
+yaml-rust = "0.4.5"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+toml = "0.5"
+
+rhai = { version = "0.19" }
+
+lazy_static = "1.4.0"
+dashmap = "4.0.2"
+
+casbin = { version = "2.0.5", default-features = false, features = ["runtime-async-std", "logging"] }
+async-std = { version = "1.9.0", features = ["attributes"] }
+
+async-trait = "0.1.48"
+
+[build-dependencies]
+cc = "1.0"

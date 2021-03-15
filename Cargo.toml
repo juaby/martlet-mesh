@@ -1,8 +1,14 @@
 [workspace]
 
 members = [
-  "data-panel",
   "control-panel",
+
+  "data-panel",
+  "data-panel-common",
+  "data-panel-database",
+  "data-panel-cache",
+  "data-panel-rpc",
+  "data-panel-mq",
 
   # Internal
 ]
