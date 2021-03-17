@@ -1,5 +1,5 @@
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader, MySQLPacket};
 use crate::protocol::database::DatabasePacket;
+use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLPacketHeader, MySQLPacketPayload};
 use crate::session::mysql::SessionContext;
 
 /**
@@ -9,8 +9,8 @@ use crate::session::mysql::SessionContext;
  */
 pub struct MySQLComQueryPacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    sql: Vec<u8>
+    command_type: u8,
+    sql: Vec<u8>,
 }
 
 impl MySQLComQueryPacket {
@@ -18,7 +18,7 @@ impl MySQLComQueryPacket {
         MySQLComQueryPacket {
             sequence_id: 0,
             command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            sql: vec![]
+            sql: vec![],
         }
     }
 
@@ -32,7 +32,7 @@ impl MySQLComQueryPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComQueryPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.sql = Vec::from(bytes.as_slice());
         this
@@ -59,7 +59,7 @@ impl MySQLTextResultSetRowPacket {
     pub fn new(sequence_id: u32, data: Vec<(bool, Vec<u8>)>) -> Self {
         MySQLTextResultSetRowPacket {
             sequence_id: sequence_id,
-            data: data
+            data: data,
         }
     }
 }
@@ -71,7 +71,7 @@ impl MySQLPacket for MySQLTextResultSetRowPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLTextResultSetRowPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
 
         for (null, col_v) in this.data.iter() {

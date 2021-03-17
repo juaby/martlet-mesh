@@ -1,16 +1,18 @@
-use crate::handler::database::mysql::CommandHandler;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader, MySQLOKPacket, MySQLEOFPacket, MySQLColumnDefinition41Packet, MySQLFieldCountPacket};
-use crate::protocol::database::{DatabasePacket, PacketPayload};
-use sqlparser::ast::Statement;
-use mysql::{Value, Conn, Params};
-use crate::protocol::database::mysql::packet::binary::{PrepareParamValue, MySQLComStmtResetPacket, MySQLComStmtPrepareOKPacket, MySQLComStmtPreparePacket, MySQLBinaryResultSetRowPacket, MySQLComStmtExecutePacket, MySQLComStmtClosePacket};
-use crate::handler::database::parser;
 use bytes::Bytes;
-use crate::protocol::database::mysql::constant::{CHARSET, MySQLColumnType};
+use mysql::{Conn, Params, Value};
 use mysql::prelude::Queryable;
-use crate::session::mysql::{SessionContext, PrepareStatementContext, session_prepare_stmt_context_statement_id};
+use sqlparser::ast::Statement;
+
+use crate::handler::database::mysql::CommandHandler;
+use crate::handler::database::parser;
+use crate::protocol::database::{DatabasePacket, PacketPayload};
+use crate::protocol::database::mysql::constant::{CHARSET, MySQLColumnType};
+use crate::protocol::database::mysql::packet::{MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLFieldCountPacket, MySQLOKPacket, MySQLPacketHeader, MySQLPacketPayload};
+use crate::protocol::database::mysql::packet::binary::{MySQLBinaryResultSetRowPacket, MySQLComStmtClosePacket, MySQLComStmtExecutePacket, MySQLComStmtPrepareOKPacket, MySQLComStmtPreparePacket, MySQLComStmtResetPacket, PrepareParamValue};
+use crate::session::mysql::{PrepareStatementContext, session_prepare_stmt_context_statement_id, SessionContext};
 
 pub struct ComStmtPrepareHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtPrepareHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
@@ -76,7 +78,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtPrepareHandle
                         org_name,
                         column_length,
                         column_type, // MySQLColumnType
-                        decimals
+                        decimals,
                     );
                 let mut column_definition41_payload = MySQLPacketPayload::new();
                 let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
@@ -117,7 +119,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtPrepareHandle
                         org_name,
                         column_length,
                         column_type, // MySQLColumnType
-                        decimals
+                        decimals,
                     );
                 let mut column_definition41_payload = MySQLPacketPayload::new();
                 let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
@@ -137,6 +139,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtPrepareHandle
 }
 
 pub struct ComStmtExecuteHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtExecuteHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
@@ -212,7 +215,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtExecuteHandle
                                 org_name,
                                 column_length,
                                 column_type, // MySQLColumnType
-                                decimals
+                                decimals,
                             );
                         let mut column_definition41_payload = MySQLPacketPayload::new();
                         let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);
@@ -260,8 +263,8 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtExecuteHandle
 
                     payloads.push(eof_payload.get_payload());
                 }
-            },
-            Statement::SetVariable{
+            }
+            Statement::SetVariable {
                 local, hivevar, variable, value
             } => {
 
@@ -294,6 +297,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtExecuteHandle
 }
 
 pub struct ComStmtCloseHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtCloseHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
@@ -309,6 +313,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtCloseHandler 
 }
 
 pub struct ComStmtResetHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComStmtResetHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();

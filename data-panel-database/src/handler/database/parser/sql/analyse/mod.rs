@@ -12,17 +12,17 @@
 
 //! SQL Abstract Syntax Tree (AST) types
 
+use sqlparser::ast::{AddDropSync, Assignment, Expr, FileFormat, Function, FunctionArg, HiveDistributionStyle, HiveFormat, HiveIOFormat, HiveRowFormat, Ident, ListAgg, ListAggOnOverflow, ObjectName, ObjectType, SetVariableValue, ShowStatementFilter, SqliteOnConflict, SqlOption, Statement, TransactionAccessMode, TransactionIsolationLevel, TransactionMode, UnaryOperator, WindowFrameBound, WindowFrameUnits, WindowSpec};
+use sqlparser::tokenizer::{Token, Whitespace, Word};
+
+// use std::fmt::Write;
+use crate::handler::database::parser::sql::SQLStatementContext;
+
 mod data_type;
 mod ddl;
 mod operator;
 mod query;
 mod value;
-
-use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, UnaryOperator, FunctionArg, ListAggOnOverflow, Ident, ListAgg, HiveDistributionStyle, HiveFormat, HiveRowFormat, HiveIOFormat, AddDropSync, SqliteOnConflict};
-// use std::fmt::Write;
-use crate::handler::database::parser::sql::{SQLStatementContext};
-use sqlparser::tokenizer::{Token, Word, Whitespace};
-use crate::handler::database::parser::sql::rewrite::SQLReWrite;
 
 pub type SAResult = data_panel_common::common::Result<()>;
 
@@ -103,29 +103,29 @@ impl SQLAnalyse for Expr {
         match self {
             Expr::Identifier(s) => {
                 s.analyse(ctx)?;
-            },
+            }
             Expr::MapAccess { column, key } => {
                 column.analyse(ctx)?;
                 // write!(f, "[\"{}\"]", key)?;
-            },
+            }
             Expr::Wildcard => {
                 // f.write_str("*")?;
-            },
+            }
             Expr::QualifiedWildcard(q) => {
                 display_separated(q, ".").analyse(ctx)?;
                 // write!(f, ".*")?;
-            },
+            }
             Expr::CompoundIdentifier(s) => {
                 display_separated(s, ".").analyse(ctx)?;
-            },
+            }
             Expr::IsNull(ast) => {
                 ast.analyse(ctx)?;
                 // write!(f, " IS NULL")?;
-            },
+            }
             Expr::IsNotNull(ast) => {
                 ast.analyse(ctx)?;
                 // write!(f, " IS NOT NULL")?;
-            },
+            }
             Expr::InList {
                 expr,
                 list,
@@ -142,7 +142,7 @@ impl SQLAnalyse for Expr {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             Expr::InSubquery {
                 expr,
                 subquery,
@@ -159,7 +159,7 @@ impl SQLAnalyse for Expr {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             Expr::Between {
                 expr,
                 negated,
@@ -178,14 +178,14 @@ impl SQLAnalyse for Expr {
                 //     " AND "
                 // )?;
                 high.analyse(ctx)?;
-            },
+            }
             Expr::BinaryOp { left, op, right } => {
                 left.analyse(ctx)?;
                 // write!(f, " ")?;
                 op.analyse(ctx)?;
                 // write!(f, " ")?;
                 right.analyse(ctx)?;
-            },
+            }
             Expr::UnaryOp { op, expr } => {
                 if op == &UnaryOperator::PGPostfixFactorial {
                     expr.analyse(ctx)?;
@@ -195,34 +195,34 @@ impl SQLAnalyse for Expr {
                     // write!(f, " ")?;
                     expr.analyse(ctx)?;
                 }
-            },
+            }
             Expr::Cast { expr, data_type } => {
                 // write!(f, "CAST(")?;
                 expr.analyse(ctx)?;
                 // write!(f, " AS ")?;
                 data_type.analyse(ctx)?;
                 // write!(f, ")")?;
-            },
+            }
             Expr::Extract { field, expr } => {
                 // write!(f, "EXTRACT(")?;
                 field.analyse(ctx)?;
                 // write!(f, " FROM ")?;
                 expr.analyse(ctx)?;
                 // write!(f, ")")?;
-            },
+            }
             Expr::Collate { expr, collation } => {
                 expr.analyse(ctx)?;
                 // write!(f, " COLLATE ")?;
                 collation.analyse(ctx)?;
-            },
+            }
             Expr::Nested(ast) => {
                 // write!(f, "(")?;
                 ast.analyse(ctx)?;
                 // write!(f, ")")?;
-            },
+            }
             Expr::Value(v) => {
                 v.analyse(ctx)?;
-            },
+            }
             Expr::TypedString { data_type, value } => {
                 data_type.analyse(ctx)?;
                 // write!(f, " '")?;
@@ -231,7 +231,7 @@ impl SQLAnalyse for Expr {
             }
             Expr::Function(fun) => {
                 fun.analyse(ctx)?;
-            },
+            }
             Expr::Case {
                 operand,
                 conditions,
@@ -260,15 +260,15 @@ impl SQLAnalyse for Expr {
                 // write!(f, "EXISTS (")?;
                 s.analyse(ctx)?;
                 // write!(f, ")")?;
-            },
+            }
             Expr::Subquery(s) => {
                 // write!(f, "(")?;
                 s.analyse(ctx)?;
                 // write!(f, ")")?;
-            },
+            }
             Expr::ListAgg(listagg) => {
                 listagg.analyse(ctx)?;
-            },
+            }
             Expr::Substring {
                 expr,
                 substring_from,
@@ -402,7 +402,7 @@ impl SQLAnalyse for Statement {
             }
             Statement::Query(s) => {
                 s.analyse(ctx)?;
-            },
+            }
             Statement::Directory {
                 overwrite,
                 local,
@@ -481,7 +481,7 @@ impl SQLAnalyse for Statement {
                         display_comma_separated(columns).analyse(ctx)?;
                     }
                 }
-            },
+            }
             Statement::Insert {
                 or, table_name,
                 columns,
@@ -740,7 +740,7 @@ impl SQLAnalyse for Statement {
                         }
                         Some(HiveRowFormat::DELIMITED) => {
                             // write!(f, " ROW FORMAT DELIMITED")?
-                        },
+                        }
                         None => (),
                     }
                     match storage {
@@ -758,7 +758,7 @@ impl SQLAnalyse for Statement {
                             //     " OUTPUTFORMAT "
                             // )?;
                             output_format.analyse(ctx)?;
-                        },
+                        }
                         Some(HiveIOFormat::FileFormat { format }) if !*external => {
                             // write!(f, " STORED AS ")?;
                             format.analyse(ctx)?;
@@ -859,7 +859,7 @@ impl SQLAnalyse for Statement {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             Statement::AlterTable { name, operation } => {
                 // write!(f, "ALTER TABLE ")?;
                 name.analyse(ctx)?;
@@ -889,7 +889,7 @@ impl SQLAnalyse for Statement {
                 //     if *cascade { " CASCADE" } else { "" }
                 //     if *purge { " PURGE" } else { "" }
                 // )?;
-            },
+            }
             Statement::SetVariable {
                 local,
                 hivevar, variable,
@@ -914,7 +914,7 @@ impl SQLAnalyse for Statement {
                     // write!(f, " ")?;
                     display_separated(variable, " ").analyse(ctx)?;
                 }
-            },
+            }
             Statement::UseDatabase { variable } => {
                 // write!(f, "USE ")?;
                 variable.analyse(ctx)?;
@@ -984,7 +984,7 @@ impl SQLAnalyse for Statement {
                 //     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                 // )?;
                 schema_name.analyse(ctx)?;
-            },
+            }
             Statement::Assert { condition, message } => {
                 // write!(f, "ASSERT ")?;
                 condition.analyse(ctx)?;
@@ -1000,7 +1000,7 @@ impl SQLAnalyse for Statement {
                 //     prepare = if *prepare { "PREPARE " } else { "" },
                 // )?;
                 name.analyse(ctx)?;
-            },
+            }
             Statement::Execute { name, parameters } => {
                 // write!(f, "EXECUTE ")?;
                 name.analyse(ctx)?;
@@ -1047,10 +1047,10 @@ impl SQLAnalyse for FunctionArg {
                 name.analyse(ctx)?;
                 // write!(f, " => ")?;
                 arg.analyse(ctx)?;
-            },
+            }
             FunctionArg::Unnamed(unnamed_arg) => {
                 unnamed_arg.analyse(ctx)?;
-            },
+            }
         };
         Ok(())
     }
@@ -1133,7 +1133,7 @@ impl SQLAnalyse for ListAggOnOverflow {
         match self {
             ListAggOnOverflow::Error => {
                 // write!(f, " ERROR")?;
-            },
+            }
             ListAggOnOverflow::Truncate { filler, with_count } => {
                 // write!(f, " TRUNCATE")?;
                 if let Some(filler) = filler {
@@ -1179,11 +1179,11 @@ impl SQLAnalyse for TransactionMode {
         match self {
             AccessMode(access_mode) => {
                 access_mode.analyse(ctx)?
-            },
+            }
             IsolationLevel(iso_level) => {
                 // write!(f, "ISOLATION LEVEL ")?;
                 iso_level.analyse(ctx)?;
-            },
+            }
         }
         Ok(())
     }
@@ -1221,11 +1221,11 @@ impl SQLAnalyse for ShowStatementFilter {
                 // write!(f, "LIKE '")?;
                 value::escape_single_quote_string(pattern).analyse(ctx)?;
                 // write!(f, "'")?;
-            },
+            }
             Where(expr) => {
                 // write!(f, "WHERE ")?;
                 expr.analyse(ctx)?
-            },
+            }
         }
         Ok(())
     }
@@ -1237,7 +1237,7 @@ impl SQLAnalyse for SetVariableValue {
         match self {
             Ident(ident) => {
                 ident.analyse(ctx)?;
-            },
+            }
             Literal(literal) => {
                 literal.analyse(ctx)?;
             }
@@ -1248,7 +1248,7 @@ impl SQLAnalyse for SetVariableValue {
 
 impl SQLAnalyse for SqliteOnConflict {
     fn analyse(&self, ctx: &mut SQLStatementContext) -> SAResult {
-        use SqliteOnConflict::*;
+        // use SqliteOnConflict::*;
         // match self {
         //     Rollback => write!(f, "ROLLBACK"),
         //     Abort => write!(f, "ABORT"),
@@ -1265,142 +1265,142 @@ impl SQLAnalyse for Token {
         match self {
             Token::EOF => {
                 // f.write_str("EOF")?
-            },
+            }
             Token::Word(ref w) => {
                 w.analyse(ctx)?;
-            },
+            }
             Token::Number(ref n, l) => {
                 // write!(f, "{}{long}", n, long = if *l { "L" } else { "" })?,
-            },
+            }
             Token::Char(ref c) => {
                 // write!(f, "{}", c)?
-            },
+            }
             Token::SingleQuotedString(ref s) => {
                 // write!(f, "'{}'", s)?
-            },
+            }
             Token::NationalStringLiteral(ref s) => {
                 // write!(f, "N'{}'", s)?
-            },
+            }
             Token::HexStringLiteral(ref s) => {
                 // write!(f, "X'{}'", s)?
-            },
+            }
             Token::Comma => {
                 // f.write_str(",")?
-            },
+            }
             Token::Whitespace(ws) => {
                 ws.analyse(ctx)?;
-            },
+            }
             Token::DoubleEq => {
                 // f.write_str("==")?;
-            },
+            }
             Token::Spaceship => {
                 // f.write_str("<=>")?;
-            },
+            }
             Token::Eq => {
                 // f.write_str("=")?
-            },
+            }
             Token::Neq => {
                 // f.write_str("<>")?
-            },
+            }
             Token::Lt => {
                 // f.write_str("<")?
-            },
+            }
             Token::Gt => {
                 // f.write_str(">")?
-            },
+            }
             Token::LtEq => {
                 // f.write_str("<=")?
-            },
+            }
             Token::GtEq => {
                 // f.write_str(">=")?
-            },
+            }
             Token::Plus => {
                 // f.write_str("+")?
-            },
+            }
             Token::Minus => {
                 // f.write_str("-")?
-            },
+            }
             Token::Mult => {
                 // f.write_str("*")?
-            },
+            }
             Token::Div => {
                 // f.write_str("/")?
-            },
+            }
             Token::StringConcat => {
                 // f.write_str("||")?
-            },
+            }
             Token::Mod => {
                 // f.write_str("%")?
-            },
+            }
             Token::LParen => {
                 // f.write_str("(")?
-            },
+            }
             Token::RParen => {
                 // f.write_str(")")?
-            },
+            }
             Token::Period => {
                 // f.write_str(".")?
-            },
+            }
             Token::Colon => {
                 // f.write_str(":")?
-            },
+            }
             Token::DoubleColon => {
                 // f.write_str("::")?
-            },
+            }
             Token::SemiColon => {
                 // f.write_str(";")?
-            },
+            }
             Token::Backslash => {
                 // f.write_str("\\")?
-            },
+            }
             Token::LBracket => {
                 // f.write_str("[")?
-            },
+            }
             Token::RBracket => {
                 // f.write_str("]")?
-            },
+            }
             Token::Ampersand => {
                 // f.write_str("&")?
-            },
+            }
             Token::Caret => {
                 // f.write_str("^")?
-            },
+            }
             Token::Pipe => {
                 // f.write_str("|")?
-            },
+            }
             Token::LBrace => {
                 // f.write_str("{")?
-            },
+            }
             Token::RBrace => {
                 // f.write_str("}")?
-            },
+            }
             Token::RArrow => {
                 // f.write_str("=>")?
-            },
+            }
             Token::Sharp => {
                 // f.write_str("#")?
-            },
+            }
             Token::ExclamationMark => {
                 // f.write_str("!")?
-            },
+            }
             Token::DoubleExclamationMark => {
                 // f.write_str("!!")?
-            },
+            }
             Token::Tilde => {
                 // f.write_str("~")?
-            },
+            }
             Token::AtSign => {
                 // f.write_str("@")?
-            },
+            }
             Token::ShiftLeft => {
                 // f.write_str("<<")?
-            },
+            }
             Token::ShiftRight => {
                 // f.write_str(">>")?
-            },
+            }
             Token::PGSquareRoot => {
                 // f.write_str("|/")?
-            },
+            }
             Token::PGCubeRoot => {
                 // f.write_str("||/")?
             }
@@ -1417,7 +1417,7 @@ impl SQLAnalyse for Word {
             }
             None => {
                 // f.write_str(&self.value)?
-            },
+            }
             _ => panic!("Unexpected quote_style!"),
         };
         Ok(())
@@ -1448,30 +1448,31 @@ impl SQLAnalyse for Whitespace {
 
 #[cfg(test)]
 mod tests {
-    use crate::handler::database::parser::sql::mysql::parser;
+    use crate::handler::database::parser::sql::{SelectStatementContext, SQLStatementContext};
     use crate::handler::database::parser::sql::analyse::SQLAnalyse;
-    use crate::handler::database::parser::sql::SQLStatementContext;
+    use crate::handler::database::parser::sql::mysql::parser;
 
     #[test]
-    fn test_rewrite() {
+    fn test_analyse() {
         let sql = "SELECT a, b, 123, myfunc(b) \
-           FROM table_1 as t, table_2 as t2, (select * from table_3 as t3) as t4 left join table_5 as t5 on t5.id = t1.id \
+           FROM table_1 as t, db.table_2 as t2, (select * from table_3 as t3) as t4 left join table_5 as t5 on t5.id = t1.id \
            WHERE a > b AND b < 100 and c = ? and d = 'are' \
            ORDER BY a DESC, b";
-        //let sql = "insert into test (a, b, c) values (1, 1, ?)";
+        // let sql = "insert into test (a, b, c) values (1, 1, ?)";
         let mut ast = parser(sql.to_string());
         let stmt = ast.pop().unwrap();
         let mut resql = String::new();
-        let mut ctx = SQLStatementContext::Default;
+        let mut ctx = SQLStatementContext::Select(SelectStatementContext::new());
         stmt.analyse(&mut ctx).unwrap();
+        ctx.add_table(String::from("table"), String::from("t1"));
         println!("{:?}", stmt.to_string());
         match ctx {
             SQLStatementContext::Select(mut s) => {
                 println!("{:?}", s.common_ctx.tables);
-            },
-            SQLStatementContext::Update(_) => {},
-            SQLStatementContext::Delete(_) => {},
-            SQLStatementContext::Default => {},
+            }
+            SQLStatementContext::Update(_) => {}
+            SQLStatementContext::Delete(_) => {}
+            SQLStatementContext::Default => {}
         }
     }
 }

@@ -4,22 +4,6 @@
 
 #![warn(rust_2018_idioms)]
 
-#[macro_use]
-extern crate bitflags;
-
-#[macro_use]
-extern crate lazy_static;
-
-use std::error::Error;
-use std::fs::File;
-use std::io::Read;
-
-use clap::{App, Arg, SubCommand};
-use toml::Value;
-use yaml_rust::{YamlEmitter, YamlLoader};
-
-use crate::config::config::MeshConfig;
-
 pub mod protocol;
 pub mod handler;
 pub mod service;

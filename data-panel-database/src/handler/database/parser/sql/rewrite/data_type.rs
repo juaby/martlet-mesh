@@ -10,10 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+use std::fmt::Write;
+
 use sqlparser::ast::DataType;
 
-use std::fmt::Write;
-use std::collections::HashMap;
 use crate::handler::database::parser::sql::rewrite::SQLReWrite;
 
 pub type SRWResult = data_panel_common::common::Result<()>;
@@ -24,25 +25,25 @@ impl SQLReWrite for DataType {
         match self {
             DataType::Char(size) => {
                 format_type_with_optional_length(f, "CHAR", size)?;
-            },
+            }
             DataType::Varchar(size) => {
                 format_type_with_optional_length(f, "CHARACTER VARYING", size)?;
             }
             DataType::Uuid => {
                 write!(f, "UUID")?;
-            },
+            }
             DataType::Clob(size) => {
                 write!(f, "CLOB({})", size)?;
-            },
+            }
             DataType::Binary(size) => {
                 write!(f, "BINARY({})", size)?;
-            },
+            }
             DataType::Varbinary(size) => {
                 write!(f, "VARBINARY({})", size)?
-            },
+            }
             DataType::Blob(size) => {
                 write!(f, "BLOB({})", size)?;
-            },
+            }
             DataType::Decimal(precision, scale) => {
                 if let Some(scale) = scale {
                     write!(f, "NUMERIC({},{})", precision.unwrap(), scale)?;
@@ -52,53 +53,53 @@ impl SQLReWrite for DataType {
             }
             DataType::Float(size) => {
                 format_type_with_optional_length(f, "FLOAT", size)?;
-            },
+            }
             DataType::SmallInt => {
                 write!(f, "SMALLINT")?;
-            },
+            }
             DataType::Int => {
                 write!(f, "INT")?;
-            },
+            }
             DataType::BigInt => {
                 write!(f, "BIGINT")?;
-            },
+            }
             DataType::Real => {
                 write!(f, "REAL")?;
-            },
+            }
             DataType::Double => {
                 write!(f, "DOUBLE")?;
-            },
+            }
             DataType::Boolean => {
                 write!(f, "BOOLEAN")?;
-            },
+            }
             DataType::Date => {
                 write!(f, "DATE")?;
-            },
+            }
             DataType::Time => {
                 write!(f, "TIME")?;
-            },
+            }
             DataType::Timestamp => {
                 write!(f, "TIMESTAMP")?;
-            },
+            }
             DataType::Interval => {
                 write!(f, "INTERVAL")?;
-            },
+            }
             DataType::Regclass => {
                 write!(f, "REGCLASS")?;
-            },
+            }
             DataType::Text => {
                 write!(f, "TEXT")?;
-            },
+            }
             DataType::String => {
                 write!(f, "STRING")?;
             }
             DataType::Bytea => {
                 write!(f, "BYTEA")?;
-            },
+            }
             DataType::Array(ty) => {
                 ty.rewrite(f, ctx)?;
                 write!(f, "[]")?;
-            },
+            }
             DataType::Custom(ty) => {
                 ty.rewrite(f, ctx)?;
             }

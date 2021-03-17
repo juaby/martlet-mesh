@@ -4,19 +4,12 @@
 
 #![warn(rust_2018_idioms)]
 
-#[macro_use]
-extern crate bitflags;
-
-#[macro_use]
-extern crate lazy_static;
-
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 
 use clap::{App, Arg, SubCommand};
 use toml::Value;
-use yaml_rust::{YamlEmitter, YamlLoader};
 
 use data_panel_common::config::config::MeshConfig;
 
@@ -44,9 +37,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .arg_from_usage("-l, --list 'lists test values'"))
         .get_matches();
 
-    println!("args : {:#?}" ,matches);
+    println!("args : {:#?}", matches);
 
-    let config_path = matches.value_of("config").unwrap_or("./etc/app.toml");
+    let config_path = matches.value_of("config").unwrap_or("./data-panel/etc/app.toml");
     println!("config_path : {}", config_path);
 
     if let Some(matches) = matches.subcommand_matches("test") {

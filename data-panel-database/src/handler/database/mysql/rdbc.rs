@@ -1,12 +1,12 @@
-use mysql::{Conn, Value, QueryResult, Text, MySqlError};
-use sqlparser::ast::Statement;
-use mysql::prelude::Queryable;
 use bytes::Bytes;
-use crate::protocol::database::mysql::packet::{MySQLColumnDefinition41Packet, MySQLFieldCountPacket, MySQLPacketPayload, MySQLEOFPacket, MySQLOKPacket, MySQLErrPacket};
-use crate::protocol::database::{DatabasePacket, PacketPayload};
-use crate::protocol::database::mysql::packet::text::MySQLTextResultSetRowPacket;
+use mysql::{Conn, QueryResult, Text, Value};
+use mysql::prelude::Queryable;
+use sqlparser::ast::Statement;
+
 use crate::handler::database::mysql::explainplan::ExplainPlan;
-use std::error::Error;
+use crate::protocol::database::{DatabasePacket, PacketPayload};
+use crate::protocol::database::mysql::packet::{MySQLColumnDefinition41Packet, MySQLEOFPacket, MySQLErrPacket, MySQLFieldCountPacket, MySQLOKPacket, MySQLPacketPayload};
+use crate::protocol::database::mysql::packet::text::MySQLTextResultSetRowPacket;
 
 pub fn text_query(plan: &ExplainPlan<'_>) -> Option<Vec<Bytes>> {
     let sql = plan.ctx().get_sql();
@@ -19,13 +19,13 @@ pub fn text_query(plan: &ExplainPlan<'_>) -> Option<Vec<Bytes>> {
         }
         Err(e) => {
             let (err_code, err_state, err_message) = match e {
-                mysql::error::Error::IoError(ref err) => (10000 as u32, err.description(), err.description()),
-                mysql::error::Error::DriverError(ref err) => (20000, err.description(), err.description()),
-                mysql::error::Error::MySqlError(ref err) => (err.code as u32, err.state.as_str(), err.message.as_str()),
-                mysql::error::Error::UrlError(ref err) => (40000, err.description(), err.description()),
-                mysql::error::Error::TlsError(ref err) => (50000, err.description(), err.description()),
-                mysql::error::Error::TlsHandshakeError(ref err) => (60000, err.description(), err.description()),
-                _ => (70000, "unknown exception", "unknown exception"),
+                mysql::error::Error::IoError(ref err) => (10000 as u32, err.to_string(), err.to_string()),
+                mysql::error::Error::DriverError(ref err) => (20000, err.to_string(), err.to_string()),
+                mysql::error::Error::MySqlError(ref err) => (err.code as u32, String::from(err.state.as_str()), String::from(err.message.as_str())),
+                mysql::error::Error::UrlError(ref err) => (40000, err.to_string(), err.to_string()),
+                mysql::error::Error::TlsError(ref err) => (50000, err.to_string(), err.to_string()),
+                mysql::error::Error::TlsHandshakeError(ref err) => (60000, err.to_string(), err.to_string()),
+                _ => (70000, String::from("unknown exception"), String::from("unknown exception")),
             };
             let mut err_packet = MySQLErrPacket::new(1, err_code as u32, err_state.to_string(), err_message.to_string());
             let mut err_payload = MySQLPacketPayload::new();
@@ -37,18 +37,18 @@ pub fn text_query(plan: &ExplainPlan<'_>) -> Option<Vec<Bytes>> {
     Some(payloads)
 }
 
-fn text_query_success(mut payloads: Vec<Bytes>, results: QueryResult<Text>, statement: &Statement) -> Vec<Bytes> {
+fn text_query_success(mut payloads: Vec<Bytes>, results: QueryResult<'_, '_, '_, Text>, statement: &Statement) -> Vec<Bytes> {
     match statement {
         Statement::Query(q) => {
             payloads = query_result(payloads, results);
-        },
+        }
         Statement::ShowVariable { variable } => {
             payloads = query_result(payloads, results);
-        },
+        }
         Statement::ShowColumns { extended, full, table_name, filter } => {
             payloads = query_result(payloads, results);
-        },
-        Statement::SetVariable{ local, hivevar, variable, value } => {
+        }
+        Statement::SetVariable { local, hivevar, variable, value } => {
             payloads = update_result(payloads, results);
         }
         Statement::Insert { .. } => {
@@ -142,7 +142,7 @@ fn text_query_success(mut payloads: Vec<Bytes>, results: QueryResult<Text>, stat
     payloads
 }
 
-fn update_result(mut payloads: Vec<Bytes>, results: QueryResult<Text>) -> Vec<Bytes> {
+fn update_result(mut payloads: Vec<Bytes>, results: QueryResult<'_, '_, '_, Text>) -> Vec<Bytes> {
     // This query will emit two result sets.
     let mut result = results;
 
@@ -167,7 +167,7 @@ fn update_result(mut payloads: Vec<Bytes>, results: QueryResult<Text>) -> Vec<By
     payloads
 }
 
-fn query_result(mut payloads: Vec<Bytes>, results: QueryResult<Text>) -> Vec<Bytes>{
+fn query_result(mut payloads: Vec<Bytes>, results: QueryResult<'_, '_, '_, Text>) -> Vec<Bytes> {
     // This query will emit more result sets.
     let mut result = results;
 
@@ -210,7 +210,7 @@ fn query_result(mut payloads: Vec<Bytes>, results: QueryResult<Text>) -> Vec<Byt
                     org_name,
                     column_length,
                     column_type, // MySQLColumnType
-                    decimals
+                    decimals,
                 );
             let mut column_definition41_payload = MySQLPacketPayload::new();
             let column_definition41_payload = DatabasePacket::encode(&mut column_definition41_packet, &mut column_definition41_payload);

@@ -64,11 +64,11 @@ segments:
 dis_rules:
   distributed_tables:
     t_order_item:
-      dis_keys: []
+      dis_keys: [ ]
       dis_algorithm:
         dis_type: HASH
         dis_expression: x + y / 3
-      dis_relatives: []
+      dis_relatives: [ ]
     t_order:
       dis_keys:
         - user_id

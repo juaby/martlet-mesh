@@ -1,7 +1,8 @@
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rand::Rng;
-use crate::protocol::database::mysql::constant::{SEED, NUL, MySQLCapabilityFlag, PROTOCOL_VERSION, SERVER_VERSION, CHARSET, MySQLStatusFlag, MySQLAuthenticationMethod};
-use bytes::{BytesMut, BufMut, Buf, Bytes};
-use crate::protocol::database::{PacketPayload, DatabasePacket};
+
+use crate::protocol::database::{DatabasePacket, PacketPayload};
+use crate::protocol::database::mysql::constant::{CHARSET, MySQLAuthenticationMethod, MySQLCapabilityFlag, MySQLStatusFlag, NUL, PROTOCOL_VERSION, SEED, SERVER_VERSION};
 use crate::session::mysql::SessionContext;
 
 pub mod text;
@@ -27,7 +28,7 @@ pub struct MySQLPacketHeader {
     len: u64,
     sequence_id: u32,
     command_packet_type: u8,
-    session_id: u64
+    session_id: u64,
 }
 
 impl MySQLPacketHeader {
@@ -36,7 +37,7 @@ impl MySQLPacketHeader {
             len,
             sequence_id,
             command_packet_type,
-            session_id
+            session_id,
         }
     }
 
@@ -335,7 +336,7 @@ impl MySQLHandshakePacket {
             status_flag: MySQLStatusFlag::ServerStatusAutocommit as u32,
             seed1: seed1,
             seed2: seed2,
-            auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string()
+            auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string(),
         }
     }
 }
@@ -347,7 +348,7 @@ impl MySQLPacket for MySQLHandshakePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLHandshakePacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.protocol_version); // protocol version
         payload.put_string_with_nul(this.server_version.as_bytes()); // server version
@@ -365,7 +366,7 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for M
             payload.put_u8(0);
         }
         // Write null for reserved to byte buffers.
-        let reserved: [u8; 10] = [0,0,0,0,0,0,0,0,0,0];
+        let reserved: [u8; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         payload.put_slice(&reserved);
         // isClientSecureConnection
         // seed 2
@@ -400,7 +401,7 @@ impl MySQLAuthSwitchRequestPacket {
             sequence_id: sequence_id,
             seed1: seed1,
             seed2: seed2,
-            auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string()
+            auth_plugin_name: MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string(),
         }
     }
 }
@@ -412,7 +413,7 @@ impl MySQLPacket for MySQLAuthSwitchRequestPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLAuthSwitchRequestPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(0xfe);
         payload.put_string_with_nul(this.auth_plugin_name.as_bytes());
@@ -448,7 +449,7 @@ impl MySQLHandshakeResponse41Packet {
             auth_response: vec![],
             capability_flags: MySQLCapabilityFlag::empty(),
             database: "".to_string(),
-            auth_plugin_name: "".to_string()
+            auth_plugin_name: "".to_string(),
         }
     }
 
@@ -474,7 +475,7 @@ impl MySQLHandshakeResponse41Packet {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLHandshakeResponse41Packet {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.capability_flags = MySQLCapabilityFlag::from_bits(payload.get_uint_le(4) as u32).unwrap();
         this.max_packet_size = payload.get_uint_le(4) as u32;
@@ -538,7 +539,7 @@ impl MySQLAuthSwitchResponsePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLAuthSwitchResponsePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.auth_response = payload.get_remaining_bytes();
         this
@@ -559,8 +560,10 @@ impl MySQLPacket for MySQLAuthSwitchResponsePacket {
 pub struct MySQLEOFPacket {
     /**
      * Header of EOF packet.
+     * 0xfe;
      */
-    header: u8, // 0xfe;
+    /// 0xfe;
+    header: u8,
     sequence_id: u32,
     warnings: u16,
     status_flags: u16,
@@ -572,13 +575,13 @@ impl MySQLEOFPacket {
             header: 0xfe,
             sequence_id,
             warnings: 0,
-            status_flags: MySQLStatusFlag::ServerStatusAutocommit as u16
+            status_flags: MySQLStatusFlag::ServerStatusAutocommit as u16,
         }
     }
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLEOFPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.header);
         payload.put_u16_le(this.warnings);
@@ -621,13 +624,13 @@ impl MySQLOKPacket {
             last_insert_id: last_insert_id,
             status_flag: MySQLStatusFlag::ServerStatusAutocommit as u32,
             warnings: 0,
-            info: "".to_string()
+            info: "".to_string(),
         }
     }
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLOKPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.header);
 
@@ -658,12 +661,14 @@ pub struct MySQLErrPacket {
     /**
      * Header of ERR packet.
      */
-    header: u8, // 0xff;
-    sql_state_marker: String, // "#";
+    /// 0xff;
+    header: u8,
+    /// "#";
+    sql_state_marker: String,
     sequence_id: u32,
     error_code: u32,
     sql_state: String,
-    error_message: String
+    error_message: String,
 }
 
 impl MySQLErrPacket {
@@ -674,13 +679,13 @@ impl MySQLErrPacket {
             sequence_id,
             error_code: 0,
             sql_state: sql_state,
-            error_message: error_message
+            error_message: error_message,
         }
     }
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLErrPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.header);
 
@@ -713,7 +718,7 @@ impl MySQLFieldCountPacket {
     pub fn new(sequence_id: u32, column_count: u32) -> Self {
         MySQLFieldCountPacket {
             sequence_id,
-            column_count
+            column_count,
         }
     }
 }
@@ -725,7 +730,7 @@ impl MySQLPacket for MySQLFieldCountPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLFieldCountPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_int_lenenc(this.column_count as usize);
 
@@ -740,8 +745,10 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for M
  * @see <a href="https://mariadb.com/kb/en/library/resultset/#column-definition-packet">Column definition packet</a>
  */
 pub struct MySQLColumnDefinition41Packet {
-    catalog: String, // "def"
-    next_length: u8, // 0x0c
+    /// "def"
+    catalog: String,
+    /// 0x0c
+    next_length: u8,
     sequence_id: u32,
     character_set: u16,
     flags: u16,
@@ -751,7 +758,8 @@ pub struct MySQLColumnDefinition41Packet {
     name: String,
     org_name: String,
     column_length: u32,
-    column_type: u8, // MySQLColumnType
+    /// MySQLColumnType
+    column_type: u8,
     decimals: u8,
 }
 
@@ -780,7 +788,7 @@ impl MySQLColumnDefinition41Packet {
             org_name,
             column_length,
             column_type,
-            decimals
+            decimals,
         }
     }
 }
@@ -792,7 +800,7 @@ impl MySQLPacket for MySQLColumnDefinition41Packet {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLColumnDefinition41Packet {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_string_lenenc(this.catalog.as_bytes());
         payload.put_string_lenenc(this.schema.as_bytes());
@@ -807,7 +815,7 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for M
         payload.put_u16_le(this.flags);
         payload.put_u8(this.decimals);
         // Write null for reserved to byte buffers.
-        let reserved: [u8; 2] = [0,0];
+        let reserved: [u8; 2] = [0, 0];
         payload.put_slice(&reserved);
 
         payload
@@ -821,8 +829,9 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for M
  */
 pub struct MySQLComInitDbPacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
-    schema: Vec<u8>
+    /// MySQLCommandPacketType,
+    command_type: u8,
+    schema: Vec<u8>,
 }
 
 impl MySQLComInitDbPacket {
@@ -830,7 +839,7 @@ impl MySQLComInitDbPacket {
         MySQLComInitDbPacket {
             sequence_id: 0,
             command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
-            schema: vec![]
+            schema: vec![],
         }
     }
 
@@ -844,7 +853,7 @@ impl MySQLComInitDbPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComInitDbPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.schema = Vec::from(bytes.as_slice());
         this
@@ -864,9 +873,10 @@ impl MySQLPacket for MySQLComInitDbPacket {
  */
 pub struct MySQLComFieldListPacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
+    /// MySQLCommandPacketType,
+    command_type: u8,
     table: Vec<u8>,
-    field_wildcard: Vec<u8>
+    field_wildcard: Vec<u8>,
 }
 
 impl MySQLComFieldListPacket {
@@ -875,7 +885,7 @@ impl MySQLComFieldListPacket {
             sequence_id: 0,
             command_type: command_type, // MySQLCommandPacketType::value_of(command_type & 0xff),
             table: vec![],
-            field_wildcard: vec![]
+            field_wildcard: vec![],
         }
     }
 
@@ -893,7 +903,7 @@ impl MySQLComFieldListPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComFieldListPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.table = payload.get_string_nul().into_bytes();
         let bytes = payload.get_remaining_bytes();
         this.field_wildcard = Vec::from(bytes.as_slice());

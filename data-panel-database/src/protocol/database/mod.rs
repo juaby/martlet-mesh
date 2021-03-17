@@ -26,7 +26,7 @@ pub trait DatabasePacket<H, T: PacketPayload, Session> {
      *
      * @param payload packet payload to be written
      */
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut T) -> &'p mut T {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut T) -> &'p mut T {
         payload
     }
 
@@ -35,7 +35,7 @@ pub trait DatabasePacket<H, T: PacketPayload, Session> {
      *
      * @param payload packet payload to be written
      */
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p H, payload: &'p mut T, session_ctx: &mut Session) -> &'d mut Self { this }
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p H, payload: &'p mut T, session_ctx: &mut Session) -> &'d mut Self { this }
 }
 
 /**

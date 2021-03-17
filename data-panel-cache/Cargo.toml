@@ -21,7 +21,7 @@ tokio-stream = "0.1"
 bytes = "1.0"
 
 # sqlparser = "0.8"
-sqlparser = { git = "https://github.com/juaby/sqlparser-rs", branch = "po/mysql"}
+sqlparser = { git = "https://github.com/juaby/sqlparser-rs", branch = "po/mysql" }
 # sqlx = { version = "0.4", default-features = false, features = [ "runtime-tokio", "tls", "mysql", "postgres", "bigdecimal", "json", "chrono", "ipnetwork", "uuid" ]}
 # sqlx = { version = "0.4", default-features = false, features = [ "runtime-tokio", "macros", "all" ]}
 mysql = "20.1"

@@ -11,7 +11,7 @@ pub enum SQLStatementContext {
     Select(SelectStatementContext),
     Update(UpdateStatementContext),
     Delete(DeleteStatementContext),
-    Default
+    Default,
 }
 
 impl SQLStatementContext {
@@ -19,10 +19,10 @@ impl SQLStatementContext {
         match self {
             SQLStatementContext::Select(s) => {
                 s.common_ctx.add_table(table, alias);
-            },
-            SQLStatementContext::Update(_) => {},
-            SQLStatementContext::Delete(_) => {},
-            SQLStatementContext::Default => {},
+            }
+            SQLStatementContext::Update(_) => {}
+            SQLStatementContext::Delete(_) => {}
+            SQLStatementContext::Default => {}
         }
     }
 }
@@ -91,6 +91,4 @@ impl DeleteStatementContext {
     }
 }
 
-pub struct SQLRewriteContext {
-
-}
+pub struct SQLRewriteContext {}

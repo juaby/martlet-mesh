@@ -12,11 +12,12 @@
 
 //! AST types specific to CREATE/ALTER variants of [Statement]
 //! (commonly referred to as Data Definition Language, or DDL)
-use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident, ReferentialAction};
-use crate::handler::database::parser::sql::rewrite::{display_comma_separated, SQLReWrite, display_separated};
-
-use std::fmt::Write;
 use std::collections::HashMap;
+use std::fmt::Write;
+
+use sqlparser::ast::{AlterTableOperation, ColumnDef, ColumnOption, ColumnOptionDef, Ident, ReferentialAction, TableConstraint};
+
+use crate::handler::database::parser::sql::rewrite::{display_comma_separated, display_separated, SQLReWrite};
 
 pub type SRWResult = data_panel_common::common::Result<()>;
 
@@ -38,11 +39,11 @@ impl SQLReWrite for AlterTableOperation {
                     f,
                     ")"
                 )?;
-            },
+            }
             AlterTableOperation::AddConstraint(c) => {
                 write!(f, "ADD ")?;
                 c.rewrite(f, ctx)?;
-            },
+            }
             AlterTableOperation::AddColumn { column_def } => {
                 write!(f, "ADD COLUMN ")?;
                 column_def.rewrite(f, ctx)?;
@@ -61,11 +62,11 @@ impl SQLReWrite for AlterTableOperation {
                     f,
                     ")"
                 )?;
-            },
+            }
             AlterTableOperation::DropConstraint { name } => {
                 write!(f, "DROP CONSTRAINT ")?;
                 name.rewrite(f, ctx)?;
-            },
+            }
             AlterTableOperation::DropColumn {
                 column_name,
                 if_exists,
@@ -82,7 +83,7 @@ impl SQLReWrite for AlterTableOperation {
                     "{}",
                     if *cascade { " CASCADE" } else { "" }
                 )?;
-            },
+            }
             AlterTableOperation::RenamePartitions {
                 old_partitions,
                 new_partitions,
@@ -101,7 +102,7 @@ impl SQLReWrite for AlterTableOperation {
                     f,
                     ")"
                 )?;
-            },
+            }
             AlterTableOperation::RenameColumn {
                 old_column_name,
                 new_column_name,
@@ -116,7 +117,7 @@ impl SQLReWrite for AlterTableOperation {
                     " TO "
                 )?;
                 new_column_name.rewrite(f, ctx)?;
-            },
+            }
             AlterTableOperation::RenameTable { table_name } => {
                 write!(f, "RENAME TO ")?;
                 table_name.rewrite(f, ctx)?;
@@ -147,7 +148,7 @@ impl SQLReWrite for TableConstraint {
                     f,
                     ")"
                 )?;
-            },
+            }
             TableConstraint::ForeignKey {
                 name,
                 columns,
@@ -174,7 +175,7 @@ impl SQLReWrite for TableConstraint {
                     f,
                     ")"
                 )?;
-            },
+            }
             TableConstraint::Check { name, expr } => {
                 display_constraint_name(name).rewrite(f, ctx)?;
                 write!(f, "CHECK (")?;
@@ -232,14 +233,14 @@ impl SQLReWrite for ColumnOption {
         match self {
             Null => {
                 write!(f, "NULL")?;
-            },
+            }
             NotNull => {
                 write!(f, "NOT NULL")?;
-            },
+            }
             Default(expr) => {
                 write!(f, "DEFAULT ")?;
                 expr.rewrite(f, ctx)?;
-            },
+            }
             Unique { is_primary } => {
                 write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
             }
@@ -273,15 +274,15 @@ impl SQLReWrite for ColumnOption {
                     write!(f, " ON UPDATE ")?;
                     action.rewrite(f, ctx)?;
                 }
-            },
+            }
             Check(expr) => {
                 write!(f, "CHECK (")?;
                 expr.rewrite(f, ctx)?;
                 write!(f, ")")?;
-            },
+            }
             DialectSpecific(val) => {
                 display_separated(val, " ").rewrite(f, ctx)?;
-            },
+            }
         };
         Ok(())
     }

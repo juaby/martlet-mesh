@@ -1,12 +1,13 @@
-use serde::{Serialize, Deserialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Cluster {
     name: String,
     segments: Segments,
-    dis_rules: DisRules
+    dis_rules: DisRules,
 }
 
 impl Cluster {
@@ -24,13 +25,13 @@ pub struct Segments {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct MetaSegment {
     primary: Segment,
-    mirrors: Vec<Segment>
+    mirrors: Vec<Segment>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataSegment {
     primary: Segment,
-    mirrors: Vec<Segment>
+    mirrors: Vec<Segment>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -38,13 +39,13 @@ pub struct Segment {
     id: u32,
     url: String,
     username: String,
-    password: String
+    password: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct DisRules {
     distributed_tables: HashMap<String, DisTable>,
-    replicated_tables: Vec<String>
+    replicated_tables: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -57,22 +58,26 @@ pub struct DisTable {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct DisAlgorithm {
     dis_type: DisType,
-    dis_expression: String
+    dis_expression: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum DisType {
-    HASH, RANGE, CUSTOM
+    HASH,
+    RANGE,
+    CUSTOM,
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use crate::discovery::database::{Cluster, Segments, DisRules, MetaSegment, Segment, DataSegment, DisTable, DisAlgorithm, DisType};
     use std::borrow::Cow;
+    use std::collections::HashMap;
     use std::fs::File;
     use std::io::Read;
+
     use rhai::{Engine, Scope};
+
+    use crate::discovery::database::{Cluster, DataSegment, DisAlgorithm, DisRules, DisTable, DisType, MetaSegment, Segment, Segments};
 
     #[test]
     fn test_custom_route() {
@@ -117,66 +122,66 @@ mod tests {
                 id: 0,
                 url: String::from("jdbc:mysql://localhost:3306/martlet"),
                 username: String::from("root"),
-                password: String::from("root")
+                password: String::from("root"),
             },
             mirrors: vec![
                 Segment {
                     id: 0,
                     url: String::from("jdbc:mysql://localhost:3306/martlet"),
                     username: String::from("root"),
-                    password: String::from("root")
+                    password: String::from("root"),
                 },
                 Segment {
                     id: 1,
                     url: String::from("jdbc:mysql://localhost:3306/martlet"),
                     username: String::from("root"),
-                    password: String::from("root")
+                    password: String::from("root"),
                 }
-            ]
+            ],
         });
         data_segments.insert(200, DataSegment {
             primary: Segment {
                 id: 0,
                 url: String::from("jdbc:mysql://localhost:3306/martlet"),
                 username: String::from("root"),
-                password: String::from("root")
+                password: String::from("root"),
             },
             mirrors: vec![
                 Segment {
                     id: 1,
                     url: String::from("jdbc:mysql://localhost:3306/martlet"),
                     username: String::from("root"),
-                    password: String::from("root")
+                    password: String::from("root"),
                 },
                 Segment {
                     id: 2,
                     url: String::from("jdbc:mysql://localhost:3306/martlet"),
                     username: String::from("root"),
-                    password: String::from("root")
+                    password: String::from("root"),
                 }
-            ]
+            ],
         });
         data_segments.insert(300, DataSegment {
             primary: Segment {
                 id: 0,
                 url: String::from("jdbc:mysql://localhost:3306/martlet"),
                 username: String::from("root"),
-                password: String::from("root")
+                password: String::from("root"),
             },
             mirrors: vec![
                 Segment {
                     id: 0,
                     url: String::from("jdbc:mysql://localhost:3306/martlet"),
                     username: String::from("root"),
-                    password: String::from("root")
+                    password: String::from("root"),
                 },
                 Segment {
                     id: 1,
                     url: String::from("jdbc:mysql://localhost:3306/martlet"),
                     username: String::from("root"),
-                    password: String::from("root")
+                    password: String::from("root"),
                 }
-            ]
+            ],
         });
         let mut distributed_tables = HashMap::new();
         distributed_tables.insert(String::from("t_order"), DisTable {
@@ -184,7 +189,7 @@ mod tests {
             dis_relatives: vec![String::from("t_order_item")],
             dis_algorithm: DisAlgorithm {
                 dis_type: DisType::HASH,
-                dis_expression: String::from("x + y / 3")
+                dis_expression: String::from("x + y / 3"),
             },
         });
         distributed_tables.insert(String::from("t_order_item"), DisTable {
@@ -192,7 +197,7 @@ mod tests {
             dis_relatives: vec![],
             dis_algorithm: DisAlgorithm {
                 dis_type: DisType::HASH,
-                dis_expression: String::from("x + y / 3")
+                dis_expression: String::from("x + y / 3"),
             },
         });
         let rc = Cluster {
@@ -203,29 +208,29 @@ mod tests {
                         id: 0,
                         url: String::from("jdbc:mysql://localhost:3306/martlet"),
                         username: String::from("root"),
-                        password: String::from("root")
+                        password: String::from("root"),
                     },
                     mirrors: vec![
                         Segment {
                             id: 0,
                             url: String::from("jdbc:mysql://localhost:3306/martlet"),
                             username: String::from("root"),
-                            password: String::from("root")
+                            password: String::from("root"),
                         },
                         Segment {
                             id: 1,
                             url: String::from("jdbc:mysql://localhost:3306/martlet"),
                             username: String::from("root"),
-                            password: String::from("root")
+                            password: String::from("root"),
                         }
-                    ]
+                    ],
                 },
-                data_segments: data_segments
+                data_segments: data_segments,
             },
             dis_rules: DisRules {
                 distributed_tables,
-                replicated_tables: vec![String::from("t_dept"), String::from("t_root")]
-            }
+                replicated_tables: vec![String::from("t_dept"), String::from("t_root")],
+            },
         };
         let s = serde_yaml::to_string(&rc).unwrap();
         println!("{}", s);

@@ -12,9 +12,9 @@
 
 //! AST types specific to CREATE/ALTER variants of [Statement]
 //! (commonly referred to as Data Definition Language, or DDL)
-use sqlparser::ast::{ColumnOption, ColumnOptionDef, ColumnDef, TableConstraint, AlterTableOperation, Ident, ReferentialAction};
-use crate::handler::database::parser::sql::analyse::{display_comma_separated, SQLAnalyse, display_separated};
+use sqlparser::ast::{AlterTableOperation, ColumnDef, ColumnOption, ColumnOptionDef, Ident, ReferentialAction, TableConstraint};
 
+use crate::handler::database::parser::sql::analyse::{display_comma_separated, display_separated, SQLAnalyse};
 // use std::fmt::Write;
 use crate::handler::database::parser::sql::SQLStatementContext;
 
@@ -38,11 +38,11 @@ impl SQLAnalyse for AlterTableOperation {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             AlterTableOperation::AddConstraint(c) => {
                 // write!(f, "ADD ")?;
                 c.analyse(ctx)?;
-            },
+            }
             AlterTableOperation::AddColumn { column_def } => {
                 // write!(f, "ADD COLUMN ")?;
                 column_def.analyse(ctx)?;
@@ -61,11 +61,11 @@ impl SQLAnalyse for AlterTableOperation {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             AlterTableOperation::DropConstraint { name } => {
                 // write!(f, "DROP CONSTRAINT ")?;
                 name.analyse(ctx)?;
-            },
+            }
             AlterTableOperation::DropColumn {
                 column_name,
                 if_exists,
@@ -82,7 +82,7 @@ impl SQLAnalyse for AlterTableOperation {
                 //     "{}",
                 //     if *cascade { " CASCADE" } else { "" }
                 // )?;
-            },
+            }
             AlterTableOperation::RenamePartitions {
                 old_partitions,
                 new_partitions,
@@ -101,7 +101,7 @@ impl SQLAnalyse for AlterTableOperation {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             AlterTableOperation::RenameColumn {
                 old_column_name,
                 new_column_name,
@@ -116,7 +116,7 @@ impl SQLAnalyse for AlterTableOperation {
                 //     " TO "
                 // )?;
                 new_column_name.analyse(ctx)?;
-            },
+            }
             AlterTableOperation::RenameTable { table_name } => {
                 // write!(f, "RENAME TO ")?;
                 table_name.analyse(ctx)?;
@@ -147,7 +147,7 @@ impl SQLAnalyse for TableConstraint {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             TableConstraint::ForeignKey {
                 name,
                 columns,
@@ -174,7 +174,7 @@ impl SQLAnalyse for TableConstraint {
                 //     f,
                 //     ")"
                 // )?;
-            },
+            }
             TableConstraint::Check { name, expr } => {
                 display_constraint_name(name).analyse(ctx)?;
                 // write!(f, "CHECK (")?;
@@ -232,14 +232,14 @@ impl SQLAnalyse for ColumnOption {
         match self {
             Null => {
                 // write!(f, "NULL")?;
-            },
+            }
             NotNull => {
                 // write!(f, "NOT NULL")?;
-            },
+            }
             Default(expr) => {
                 // write!(f, "DEFAULT ")?;
                 expr.analyse(ctx)?;
-            },
+            }
             Unique { is_primary } => {
                 // write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
             }
@@ -273,15 +273,15 @@ impl SQLAnalyse for ColumnOption {
                     // write!(f, " ON UPDATE ")?;
                     action.analyse(ctx)?;
                 }
-            },
+            }
             Check(expr) => {
                 // write!(f, "CHECK (")?;
                 expr.analyse(ctx)?;
                 // write!(f, ")")?;
-            },
+            }
             DialectSpecific(val) => {
                 display_separated(val, " ").analyse(ctx)?;
-            },
+            }
         };
         Ok(())
     }

@@ -6,11 +6,8 @@
 
 #[macro_use]
 extern crate bitflags;
-
 #[macro_use]
 extern crate lazy_static;
-
-use std::error::Error;
 
 pub mod protocol;
 pub mod handler;

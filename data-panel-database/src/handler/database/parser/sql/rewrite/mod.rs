@@ -12,16 +12,17 @@
 
 //! SQL Abstract Syntax Tree (AST) types
 
+use std::collections::HashMap;
+use std::fmt::Write;
+
+use sqlparser::ast::{AddDropSync, Assignment, Expr, FileFormat, Function, FunctionArg, HiveDistributionStyle, HiveFormat, HiveIOFormat, HiveRowFormat, Ident, ListAgg, ListAggOnOverflow, ObjectName, ObjectType, SetVariableValue, ShowStatementFilter, SqliteOnConflict, SqlOption, Statement, TransactionAccessMode, TransactionIsolationLevel, TransactionMode, UnaryOperator, WindowFrameBound, WindowFrameUnits, WindowSpec};
+use sqlparser::tokenizer::{Token, Whitespace, Word};
+
 mod data_type;
 mod ddl;
 mod operator;
 mod query;
 mod value;
-
-use sqlparser::ast::{SetVariableValue, ShowStatementFilter, TransactionIsolationLevel, TransactionAccessMode, TransactionMode, SqlOption, ObjectType, FileFormat, Function, Assignment, Statement, WindowFrameBound, WindowFrameUnits, WindowSpec, Expr, ObjectName, Ident, FunctionArg, UnaryOperator, ListAggOnOverflow, ListAgg, HiveDistributionStyle, HiveFormat, HiveRowFormat, HiveIOFormat, AddDropSync, SqliteOnConflict};
-use std::fmt::Write;
-use std::collections::HashMap;
-use sqlparser::tokenizer::{Token, Word, Whitespace};
 
 pub type SRWResult = data_panel_common::common::Result<()>;
 
@@ -30,16 +31,16 @@ pub trait SQLReWrite {
 }
 
 struct DisplaySeparated<'a, T>
-where
-    T: SQLReWrite,
+    where
+        T: SQLReWrite,
 {
     slice: &'a [T],
     sep: &'static str,
 }
 
 impl<'a, T> SQLReWrite for DisplaySeparated<'a, T>
-where
-    T: SQLReWrite,
+    where
+        T: SQLReWrite,
 {
     fn rewrite(&self, f: &mut String, ctx: &HashMap<String, String>) -> SRWResult {
         let mut delim = "";
@@ -53,15 +54,15 @@ where
 }
 
 fn display_separated<'a, T>(slice: &'a [T], sep: &'static str) -> DisplaySeparated<'a, T>
-where
-    T: SQLReWrite,
+    where
+        T: SQLReWrite,
 {
     DisplaySeparated { slice, sep }
 }
 
 fn display_comma_separated<T>(slice: &[T]) -> DisplaySeparated<'_, T>
-where
-    T: SQLReWrite,
+    where
+        T: SQLReWrite,
 {
     DisplaySeparated { slice, sep: ", " }
 }
@@ -102,29 +103,29 @@ impl SQLReWrite for Expr {
         match self {
             Expr::Identifier(s) => {
                 s.rewrite(f, ctx)?;
-            },
+            }
             Expr::MapAccess { column, key } => {
                 column.rewrite(f, ctx)?;
                 write!(f, "[\"{}\"]", key)?;
-            },
+            }
             Expr::Wildcard => {
                 f.write_str("*")?;
-            },
+            }
             Expr::QualifiedWildcard(q) => {
                 display_separated(q, ".").rewrite(f, ctx)?;
                 write!(f, ".*")?;
-            },
+            }
             Expr::CompoundIdentifier(s) => {
                 display_separated(s, ".").rewrite(f, ctx)?;
-            },
+            }
             Expr::IsNull(ast) => {
                 ast.rewrite(f, ctx)?;
                 write!(f, " IS NULL")?;
-            },
+            }
             Expr::IsNotNull(ast) => {
                 ast.rewrite(f, ctx)?;
                 write!(f, " IS NOT NULL")?;
-            },
+            }
             Expr::InList {
                 expr,
                 list,
@@ -141,7 +142,7 @@ impl SQLReWrite for Expr {
                     f,
                     ")"
                 )?;
-            },
+            }
             Expr::InSubquery {
                 expr,
                 subquery,
@@ -158,7 +159,7 @@ impl SQLReWrite for Expr {
                     f,
                     ")"
                 )?;
-            },
+            }
             Expr::Between {
                 expr,
                 negated,
@@ -177,14 +178,14 @@ impl SQLReWrite for Expr {
                     " AND "
                 )?;
                 high.rewrite(f, ctx)?;
-            },
+            }
             Expr::BinaryOp { left, op, right } => {
                 left.rewrite(f, ctx)?;
                 write!(f, " ")?;
                 op.rewrite(f, ctx)?;
                 write!(f, " ")?;
                 right.rewrite(f, ctx)?;
-            },
+            }
             Expr::UnaryOp { op, expr } => {
                 if op == &UnaryOperator::PGPostfixFactorial {
                     expr.rewrite(f, ctx)?;
@@ -194,34 +195,34 @@ impl SQLReWrite for Expr {
                     write!(f, " ")?;
                     expr.rewrite(f, ctx)?;
                 }
-            },
+            }
             Expr::Cast { expr, data_type } => {
                 write!(f, "CAST(")?;
                 expr.rewrite(f, ctx)?;
                 write!(f, " AS ")?;
                 data_type.rewrite(f, ctx)?;
                 write!(f, ")")?;
-            },
+            }
             Expr::Extract { field, expr } => {
                 write!(f, "EXTRACT(")?;
                 field.rewrite(f, ctx)?;
                 write!(f, " FROM ")?;
                 expr.rewrite(f, ctx)?;
                 write!(f, ")")?;
-            },
+            }
             Expr::Collate { expr, collation } => {
                 expr.rewrite(f, ctx)?;
                 write!(f, " COLLATE ")?;
                 collation.rewrite(f, ctx)?;
-            },
+            }
             Expr::Nested(ast) => {
                 write!(f, "(")?;
                 ast.rewrite(f, ctx)?;
                 write!(f, ")")?;
-            },
+            }
             Expr::Value(v) => {
                 v.rewrite(f, ctx)?;
-            },
+            }
             Expr::TypedString { data_type, value } => {
                 data_type.rewrite(f, ctx)?;
                 write!(f, " '")?;
@@ -230,7 +231,7 @@ impl SQLReWrite for Expr {
             }
             Expr::Function(fun) => {
                 fun.rewrite(f, ctx)?;
-            },
+            }
             Expr::Case {
                 operand,
                 conditions,
@@ -259,15 +260,15 @@ impl SQLReWrite for Expr {
                 write!(f, "EXISTS (")?;
                 s.rewrite(f, ctx)?;
                 write!(f, ")")?;
-            },
+            }
             Expr::Subquery(s) => {
                 write!(f, "(")?;
                 s.rewrite(f, ctx)?;
                 write!(f, ")")?;
-            },
+            }
             Expr::ListAgg(listagg) => {
                 listagg.rewrite(f, ctx)?;
-            },
+            }
             Expr::Substring {
                 expr,
                 substring_from,
@@ -401,7 +402,7 @@ impl SQLReWrite for Statement {
             }
             Statement::Query(s) => {
                 s.rewrite(f, ctx)?;
-            },
+            }
             Statement::Directory {
                 overwrite,
                 local,
@@ -480,7 +481,7 @@ impl SQLReWrite for Statement {
                         display_comma_separated(columns).rewrite(f, ctx)?;
                     }
                 }
-            },
+            }
             Statement::Insert {
                 or, table_name,
                 columns,
@@ -755,7 +756,7 @@ impl SQLReWrite for Statement {
                                 " OUTPUTFORMAT "
                             )?;
                             output_format.rewrite(f, ctx)?;
-                        },
+                        }
                         Some(HiveIOFormat::FileFormat { format }) if !*external => {
                             write!(f, " STORED AS ")?;
                             format.rewrite(f, ctx)?;
@@ -825,7 +826,7 @@ impl SQLReWrite for Statement {
                 if !module_args.is_empty() {
                     write!(f, " (")?;
                     display_comma_separated(module_args).rewrite(f, ctx)?;
-                    write!(f, ")",)?;
+                    write!(f, ")", )?;
                 }
             }
             Statement::CreateIndex {
@@ -856,7 +857,7 @@ impl SQLReWrite for Statement {
                     f,
                     ")"
                 )?;
-            },
+            }
             Statement::AlterTable { name, operation } => {
                 write!(f, "ALTER TABLE ")?;
                 name.rewrite(f, ctx)?;
@@ -886,7 +887,7 @@ impl SQLReWrite for Statement {
                     if *cascade { " CASCADE" } else { "" },
                     if *purge { " PURGE" } else { "" }
                 )?;
-            },
+            }
             Statement::SetVariable {
                 local,
                 hivevar, variable,
@@ -911,7 +912,7 @@ impl SQLReWrite for Statement {
                     write!(f, " ")?;
                     display_separated(variable, " ").rewrite(f, ctx)?;
                 }
-            },
+            }
             Statement::UseDatabase { variable } => {
                 write!(f, "USE ")?;
                 variable.rewrite(f, ctx)?;
@@ -953,7 +954,7 @@ impl SQLReWrite for Statement {
                 variable.rewrite(f, ctx)?;
             }
             Statement::Commit { chain } => {
-                write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" },)?;
+                write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" }, )?;
             }
             Statement::Savepoint { variable } => {
                 write!(f, "SAVEPOINT ")?;
@@ -964,7 +965,7 @@ impl SQLReWrite for Statement {
                     write!(f, "ROLLBACK TO SAVEPOINT ")?;
                     savepoint.rewrite(f, ctx)?;
                 } else {
-                    write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)?;
+                    write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" }, )?;
                 }
             }
             Statement::Release { variable } => {
@@ -981,7 +982,7 @@ impl SQLReWrite for Statement {
                     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                 )?;
                 schema_name.rewrite(f, ctx)?;
-            },
+            }
             Statement::Assert { condition, message } => {
                 write!(f, "ASSERT ")?;
                 condition.rewrite(f, ctx)?;
@@ -997,14 +998,14 @@ impl SQLReWrite for Statement {
                     prepare = if *prepare { "PREPARE " } else { "" },
                 )?;
                 name.rewrite(f, ctx)?;
-            },
+            }
             Statement::Execute { name, parameters } => {
                 write!(f, "EXECUTE ")?;
                 name.rewrite(f, ctx)?;
                 if !parameters.is_empty() {
                     write!(f, "(")?;
                     display_comma_separated(parameters).rewrite(f, ctx)?;
-                    write!(f, "()",)?;
+                    write!(f, "()", )?;
                 }
             }
             Statement::Prepare {
@@ -1044,10 +1045,10 @@ impl SQLReWrite for FunctionArg {
                 name.rewrite(f, ctx)?;
                 write!(f, " => ")?;
                 arg.rewrite(f, ctx)?;
-            },
+            }
             FunctionArg::Unnamed(unnamed_arg) => {
                 unnamed_arg.rewrite(f, ctx)?;
-            },
+            }
         };
         Ok(())
     }
@@ -1130,7 +1131,7 @@ impl SQLReWrite for ListAggOnOverflow {
         match self {
             ListAggOnOverflow::Error => {
                 write!(f, " ERROR")?;
-            },
+            }
             ListAggOnOverflow::Truncate { filler, with_count } => {
                 write!(f, " TRUNCATE")?;
                 if let Some(filler) = filler {
@@ -1176,11 +1177,11 @@ impl SQLReWrite for TransactionMode {
         match self {
             AccessMode(access_mode) => {
                 access_mode.rewrite(f, ctx)?
-            },
+            }
             IsolationLevel(iso_level) => {
                 write!(f, "ISOLATION LEVEL ")?;
                 iso_level.rewrite(f, ctx)?;
-            },
+            }
         }
         Ok(())
     }
@@ -1218,11 +1219,11 @@ impl SQLReWrite for ShowStatementFilter {
                 write!(f, "LIKE '")?;
                 value::escape_single_quote_string(pattern).rewrite(f, ctx)?;
                 write!(f, "'")?;
-            },
+            }
             Where(expr) => {
                 write!(f, "WHERE ")?;
                 expr.rewrite(f, ctx)?
-            },
+            }
         }
         Ok(())
     }
@@ -1234,7 +1235,7 @@ impl SQLReWrite for SetVariableValue {
         match self {
             Ident(ident) => {
                 ident.rewrite(f, ctx)?;
-            },
+            }
             Literal(literal) => {
                 literal.rewrite(f, ctx)?;
             }
@@ -1263,7 +1264,7 @@ impl SQLReWrite for Token {
             Token::EOF => f.write_str("EOF")?,
             Token::Word(ref w) => {
                 w.rewrite(f, ctx)?;
-            },
+            }
             Token::Number(ref n, l) => write!(f, "{}{long}", n, long = if *l { "L" } else { "" })?,
             Token::Char(ref c) => write!(f, "{}", c)?,
             Token::SingleQuotedString(ref s) => write!(f, "'{}'", s)?,
@@ -1272,7 +1273,7 @@ impl SQLReWrite for Token {
             Token::Comma => f.write_str(",")?,
             Token::Whitespace(ws) => {
                 ws.rewrite(f, ctx)?;
-            },
+            }
             Token::DoubleEq => f.write_str("==")?,
             Token::Spaceship => f.write_str("<=>")?,
             Token::Eq => f.write_str("=")?,
@@ -1353,9 +1354,10 @@ impl SQLReWrite for Whitespace {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::handler::database::parser::sql::mysql::parser;
     use crate::handler::database::parser::sql::rewrite::SQLReWrite;
-    use std::collections::HashMap;
 
     #[test]
     fn test_rewrite() {

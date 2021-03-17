@@ -1,9 +1,10 @@
-use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket, MySQLAuthSwitchRequestPacket, MySQLAuthSwitchResponsePacket};
 use bytes::Bytes;
-use crate::protocol::database::mysql::constant::{MySQLCommandPacketType, MySQLAuthenticationMethod, MySQLCapabilityFlag, MySQLConnectionPhase};
-use crate::protocol::database::{DatabasePacket, PacketPayload, CommandPacketType};
-use crate::handler::database::mysql::binary::{ComStmtResetHandler, ComStmtCloseHandler, ComStmtExecuteHandler, ComStmtPrepareHandler};
+
+use crate::handler::database::mysql::binary::{ComStmtCloseHandler, ComStmtExecuteHandler, ComStmtPrepareHandler, ComStmtResetHandler};
 use crate::handler::database::mysql::text::ComQueryHandler;
+use crate::protocol::database::{CommandPacketType, DatabasePacket, PacketPayload};
+use crate::protocol::database::mysql::constant::{MySQLAuthenticationMethod, MySQLCapabilityFlag, MySQLCommandPacketType, MySQLConnectionPhase};
+use crate::protocol::database::mysql::packet::{MySQLAuthSwitchRequestPacket, MySQLAuthSwitchResponsePacket, MySQLHandshakePacket, MySQLHandshakeResponse41Packet, MySQLOKPacket, MySQLPacket, MySQLPacketHeader, MySQLPacketPayload};
 use crate::session::mysql::SessionContext;
 
 pub mod text;
@@ -16,6 +17,7 @@ pub trait CommandHandler<P, Session> {
 }
 
 pub struct CommandRootHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for CommandRootHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
@@ -24,25 +26,25 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for CommandRootHandler {
         match MySQLCommandPacketType::value_of(command_packet_type) {
             MySQLCommandPacketType::ComQuery => {
                 ComQueryHandler::handle(Some(command_packet_header), Some(command_packet), session_ctx)
-            },
+            }
             MySQLCommandPacketType::ComStmtPrepare => {
                 ComStmtPrepareHandler::handle(Some(command_packet_header), Some(command_packet), session_ctx)
-            },
+            }
             MySQLCommandPacketType::ComStmtExecute => {
                 ComStmtExecuteHandler::handle(Some(command_packet_header), Some(command_packet), session_ctx)
-            },
+            }
             MySQLCommandPacketType::ComStmtClose => {
                 ComStmtCloseHandler::handle(Some(command_packet_header), Some(command_packet), session_ctx)
-            },
+            }
             MySQLCommandPacketType::ComStmtReset => {
                 ComStmtResetHandler::handle(Some(command_packet_header), Some(command_packet), session_ctx)
-            },
+            }
             MySQLCommandPacketType::ComQuit => {
                 ComQuitHandler::handle(Some(command_packet_header), None, session_ctx)
-            },
+            }
             MySQLCommandPacketType::ComPing => {
                 ComPingHandler::handle(Some(command_packet_header), None, session_ctx)
-            },
+            }
             _ => {
                 None
             }
@@ -51,6 +53,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for CommandRootHandler {
 }
 
 pub struct HandshakeHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for HandshakeHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let mut handshake_packet = MySQLHandshakePacket::new(session_ctx.get_thread_id() as u32, session_ctx.get_auth_plugin_data1(), session_ctx.get_auth_plugin_data2());
@@ -61,6 +64,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for HandshakeHandler {
 }
 
 pub struct AuthPhaseFastPathHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for AuthPhaseFastPathHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
@@ -78,7 +82,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for AuthPhaseFastPathHan
 
         if handshake_response41_packet.get_capability_flags().contains(MySQLCapabilityFlag::CLIENT_PLUGIN_AUTH)
             && MySQLAuthenticationMethod::SecurePasswordAuthentication.value().to_string().eq(handshake_response41_packet.get_auth_plugin_name().as_str()) {
-            session_ctx.set_connection_phase(MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH);
+            session_ctx.set_connection_phase(MySQLConnectionPhase::AuthenticationMethodMismatch);
 
             let mut ok_auth_switch_request_packet = MySQLAuthSwitchRequestPacket::new(handshake_response41_packet.get_sequence_id() + 1, session_ctx.get_auth_plugin_data1(), session_ctx.get_auth_plugin_data2());
             let mut auth_switch_request_payload = MySQLPacketPayload::new();
@@ -96,6 +100,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for AuthPhaseFastPathHan
 }
 
 pub struct AuthMethodMismatchHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for AuthMethodMismatchHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, payload: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let command_packet_header = command_packet_header.unwrap();
@@ -110,6 +115,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for AuthMethodMismatchHa
 }
 
 pub struct ComQuitHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComQuitHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
@@ -120,6 +126,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComQuitHandler {
 }
 
 pub struct ComPingHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComPingHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         let mut ok_packet = MySQLOKPacket::new(1, 0, 0);
@@ -131,17 +138,19 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComPingHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use crate::discovery::database::Cluster;
-    use std::io::Read;
-    use crate::handler::database::parser::sql::mysql::parser;
-    use crate::handler::database::parser::sql::rewrite::SQLReWrite;
     use std::collections::HashMap;
-    use crate::handler::database::parser::sql::SQLStatementContext;
-    use crate::handler::database::parser::sql::analyse::SQLAnalyse;
+    use std::fs::File;
+    use std::io::Read;
+
     use mysql::Conn;
     use mysql::prelude::Queryable;
     use sqlparser::parser::Parser;
+
+    use crate::discovery::database::Cluster;
+    use crate::handler::database::parser::sql::analyse::SQLAnalyse;
+    use crate::handler::database::parser::sql::mysql::parser;
+    use crate::handler::database::parser::sql::rewrite::SQLReWrite;
+    use crate::handler::database::parser::sql::SQLStatementContext;
 
     #[test]
     fn test_route() {
@@ -167,5 +176,4 @@ mod tests {
 
         assert_eq!(sql.to_uppercase(), rewrite_sql.to_uppercase());
     }
-
 }

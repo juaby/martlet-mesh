@@ -10,12 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+use std::fmt::Write;
+
+use sqlparser::ast::{DateTimeField, Value};
+
 #[cfg(feature = "bigdecimal")]
 use bigdecimal::BigDecimal;
-use sqlparser::ast::{Value, DateTimeField};
 
-use std::fmt::Write;
-use std::collections::HashMap;
 use crate::handler::database::parser::sql::rewrite::SQLReWrite;
 
 pub type SRWResult = data_panel_common::common::Result<()>;
@@ -26,24 +28,24 @@ impl SQLReWrite for Value {
         match self {
             Value::Number(v, l) => {
                 write!(f, "{}{long}", v, long = if *l { "L" } else { "" })?;
-            },
+            }
             Value::DoubleQuotedString(v) => {
                 write!(f, "\"{}\"", v)?;
-            },
+            }
             Value::SingleQuotedString(v) => {
                 write!(f, "'")?;
                 escape_single_quote_string(v).rewrite(f, ctx)?;
                 write!(f, "'")?;
-            },
+            }
             Value::NationalStringLiteral(v) => {
                 write!(f, "N'{}'", v)?;
-            },
+            }
             Value::HexStringLiteral(v) => {
                 write!(f, "X'{}'", v)?;
-            },
+            }
             Value::Boolean(v) => {
                 write!(f, "{}", v)?
-            },
+            }
             Value::Interval {
                 value,
                 leading_field: Some(DateTimeField::Second),
@@ -89,7 +91,7 @@ impl SQLReWrite for Value {
             }
             Value::Null => {
                 write!(f, "NULL")?;
-            },
+            }
         };
         Ok(())
     }

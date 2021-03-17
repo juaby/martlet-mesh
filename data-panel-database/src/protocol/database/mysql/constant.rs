@@ -33,11 +33,11 @@ pub enum MySQLStatusFlag {
     ServerSessionStateChanged = 0x4000,
 }
 
-///
-/// Capability flag for MySQL.
-///
-/// @see <a href="https://dev.mysql.com/doc/internals/en/capability-flags.html#packet-Protocol::CapabilityFlags">CapabilityFlags</a>
-///
+//
+// Capability flag for MySQL.
+//
+// @see <a href="https://dev.mysql.com/doc/internals/en/capability-flags.html#packet-Protocol::CapabilityFlags">CapabilityFlags</a>
+//
 bitflags! {
     /// Client capability flags
     pub struct MySQLCapabilityFlag: u32 {
@@ -304,9 +304,9 @@ impl MySQLAuthenticationMethod {
 ///
 #[derive(Debug, PartialEq)]
 pub enum MySQLConnectionPhase {
-    INITIAL_HANDSHAKE,
-    AUTH_PHASE_FAST_PATH,
-    AUTHENTICATION_METHOD_MISMATCH
+    InitialHandshake,
+    AuthPhaseFastPath,
+    AuthenticationMethodMismatch,
 }
 
 ///

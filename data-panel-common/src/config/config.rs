@@ -1,17 +1,16 @@
 use std::fs::File;
 use std::io::Read;
-
-use serde::Deserialize;
-use serde::Serialize;
+use std::sync::{Arc, RwLock};
 
 use lazy_static::lazy_static;
-use std::sync::{Arc, RwLock};
+use serde::Deserialize;
+use serde::Serialize;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct MeshConfig {
     app: AppConfig,
     control: ControlConfig,
-    system: SystemConfig
+    system: SystemConfig,
 }
 
 impl MeshConfig {

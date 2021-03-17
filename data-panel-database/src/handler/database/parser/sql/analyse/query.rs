@@ -10,14 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, With, Offset, OffsetRows, Top};
+use sqlparser::ast::{Cte, Fetch, Join, JoinConstraint, JoinOperator, Offset, OffsetRows, OrderByExpr, Query, Select, SelectItem, SetExpr, SetOperator, TableAlias, TableFactor, TableWithJoins, Top, Values, With};
+
+use crate::handler::database::parser::sql::analyse::{display_comma_separated, SQLAnalyse};
+use crate::handler::database::parser::sql::SQLStatementContext;
 
 // use std::fmt::Write;
 
 pub type SAResult = data_panel_common::common::Result<()>;
-
-use crate::handler::database::parser::sql::analyse::{display_comma_separated, SQLAnalyse};
-use crate::handler::database::parser::sql::SQLStatementContext;
 
 /// The most complete variant of a `SELECT` query expression, optionally
 /// including `WITH`, `UNION` / other set operations, and `ORDER BY`.
@@ -54,16 +54,16 @@ impl SQLAnalyse for SetExpr {
         match self {
             SetExpr::Select(s) => {
                 s.analyse(ctx)?;
-            },
+            }
             SetExpr::Query(q) => {
                 q.analyse(ctx)?;
-            },
+            }
             SetExpr::Values(v) => {
                 v.analyse(ctx)?;
-            },
+            }
             SetExpr::Insert(v) => {
                 v.analyse(ctx)?;
-            },
+            }
             SetExpr::SetOperation {
                 left,
                 right,
@@ -158,19 +158,19 @@ impl SQLAnalyse for SelectItem {
         match &self {
             SelectItem::UnnamedExpr(expr) => {
                 expr.analyse(ctx)?;
-            },
+            }
             SelectItem::ExprWithAlias { expr, alias } => {
                 expr.analyse(ctx)?;
                 // write!(f, " AS ")?;
                 alias.analyse(ctx)?;
-            },
+            }
             SelectItem::QualifiedWildcard(prefix) => {
                 prefix.analyse(ctx)?;
                 // write!(f, ".*")?;
-            },
+            }
             SelectItem::Wildcard => {
                 // write!(f, "*")?;
-            },
+            }
         }
         Ok(())
     }
@@ -202,10 +202,13 @@ impl SQLAnalyse for TableFactor {
                     display_comma_separated(args).analyse(ctx)?;
                     // write!(f, ")")?;
                 }
+                let mut alias_name = String::from("");
                 if let Some(alias) = alias {
                     // write!(f, " AS ")?;
                     alias.analyse(ctx)?;
+                    alias_name.push_str(alias.name.value.as_str())
                 }
+                ctx.add_table(name.to_string(), alias_name);
                 if !with_hints.is_empty() {
                     // write!(f, " WITH (")?;
                     display_comma_separated(with_hints).analyse(ctx)?;
@@ -245,7 +248,7 @@ impl SQLAnalyse for TableFactor {
                 table_reference.analyse(ctx)?;
                 // write!(f, ")")?;
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -279,7 +282,7 @@ impl SQLAnalyse for Join {
                             // write!(f, " ON ")?;
                             expr.analyse(ctx)?;
                             Ok(())
-                        },
+                        }
                         JoinConstraint::Using(attrs) => {
                             // write!(f, " USING(")?;
                             display_comma_separated(attrs).analyse(ctx)?;
@@ -301,7 +304,7 @@ impl SQLAnalyse for Join {
                 // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
-            },
+            }
             JoinOperator::LeftOuter(constraint) => {
                 // write!(
                 //     f,
@@ -310,7 +313,7 @@ impl SQLAnalyse for Join {
                 // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
-            },
+            }
             JoinOperator::RightOuter(constraint) => {
                 // write!(
                 //     f,
@@ -319,7 +322,7 @@ impl SQLAnalyse for Join {
                 // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
-            },
+            }
             JoinOperator::FullOuter(constraint) => {
                 // write!(
                 //     f,
@@ -328,19 +331,19 @@ impl SQLAnalyse for Join {
                 // )?;
                 self.relation.analyse(ctx)?;
                 suffix(constraint).analyse(ctx)?;
-            },
+            }
             JoinOperator::CrossJoin => {
                 // write!(f, " CROSS JOIN ")?;
                 self.relation.analyse(ctx)?;
-            },
+            }
             JoinOperator::CrossApply => {
                 // write!(f, " CROSS APPLY ")?;
                 self.relation.analyse(ctx)?;
-            },
+            }
             JoinOperator::OuterApply => {
                 // write!(f, " OUTER APPLY ")?;
                 self.relation.analyse(ctx)?;
-            },
+            }
         }
         Ok(())
     }

@@ -10,9 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use sqlparser::ast::{DateTimeField, Value};
+
 #[cfg(feature = "bigdecimal")]
 use bigdecimal::BigDecimal;
-use sqlparser::ast::{Value, DateTimeField};
 
 // use std::fmt::Write;
 use crate::handler::database::parser::sql::analyse::SQLAnalyse;
@@ -26,24 +27,24 @@ impl SQLAnalyse for Value {
         match self {
             Value::Number(v, l) => {
                 // write!(f, "{}{long}", v, long = if *l { "L" } else { "" })?;
-            },
+            }
             Value::DoubleQuotedString(v) => {
                 // write!(f, "\"{}\"", v)?;
-            },
+            }
             Value::SingleQuotedString(v) => {
                 // write!(f, "'")?;
                 escape_single_quote_string(v).analyse(ctx)?;
                 // write!(f, "'")?;
-            },
+            }
             Value::NationalStringLiteral(v) => {
                 // write!(f, "N'{}'", v)?;
-            },
+            }
             Value::HexStringLiteral(v) => {
                 // write!(f, "X'{}'", v)?;
-            },
+            }
             Value::Boolean(v) => {
                 // write!(f, "{}", v)?
-            },
+            }
             Value::Interval {
                 value,
                 leading_field: Some(DateTimeField::Second),
@@ -89,7 +90,7 @@ impl SQLAnalyse for Value {
             }
             Value::Null => {
                 // write!(f, "NULL")?;
-            },
+            }
         };
         Ok(())
     }

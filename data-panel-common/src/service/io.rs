@@ -1,19 +1,14 @@
-use std::net::{SocketAddr};
+use std::io::ErrorKind;
 
-use bytes::{Buf, Bytes, BytesMut};
-
+use bytes::Bytes;
+use futures::io::Error;
 use futures::SinkExt;
-
-use tokio::net::TcpStream;
-use tokio_stream::{StreamExt};
-
 use tokio::net::tcp::ReadHalf;
 use tokio::net::tcp::WriteHalf;
+use tokio::net::TcpStream;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio_util::codec::LengthDelimitedCodec;
 
-use futures::io::{Error};
-use std::io::ErrorKind;
 use crate::service::ServiceCodec;
 
 pub struct Channel<'a> {
@@ -30,7 +25,7 @@ impl<'a> Channel<'a> {
         Channel {
             // socket: socket,
             stream: stream,
-            sink: sink
+            sink: sink,
         }
     }
 
@@ -40,12 +35,12 @@ impl<'a> Channel<'a> {
                 if bytes.len() > 0 {
                     for payload in bytes {
                         if let Err(e) = self.sink.send(payload).await {
-                            return Err(e)
+                            return Err(e);
                         }
                     }
                 }
                 Ok(())
-            },
+            }
             _ => {
                 Err(Error::new(ErrorKind::InvalidData, "empty payload!!!"))
             }

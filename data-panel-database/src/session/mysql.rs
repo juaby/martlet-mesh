@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::protocol::database::mysql::constant::MySQLConnectionPhase;
 use crate::protocol::database::mysql::packet::generate_random_bytes;
 
@@ -22,12 +23,12 @@ impl SessionContext {
     pub fn new(id: u64) -> Self {
         let mut seed1: Vec<u8> = Vec::new();
         let mut seed2: Vec<u8> = Vec::new();
-        let auth_plugin_data1= generate_random_bytes(8, seed1.as_mut());
-        let auth_plugin_data2= generate_random_bytes(12, seed2.as_mut());
+        let auth_plugin_data1 = generate_random_bytes(8, seed1.as_mut());
+        let auth_plugin_data2 = generate_random_bytes(12, seed2.as_mut());
         SessionContext {
             id,
             authorized: false,
-            connection_phase: MySQLConnectionPhase::INITIAL_HANDSHAKE,
+            connection_phase: MySQLConnectionPhase::InitialHandshake,
             auth_plugin_data1,
             auth_plugin_data2,
             prepare_stmt_ctx_id: HashMap::new(),
@@ -35,7 +36,7 @@ impl SessionContext {
             character_set: 0,
             user_name: "".to_string(),
             auth_response: vec![],
-            database: "".to_string()
+            database: "".to_string(),
         }
     }
 
@@ -126,9 +127,9 @@ impl SessionContext {
 
     pub fn get_connection_phase(&self) -> MySQLConnectionPhase {
         match self.connection_phase {
-            MySQLConnectionPhase::INITIAL_HANDSHAKE => MySQLConnectionPhase::INITIAL_HANDSHAKE,
-            MySQLConnectionPhase::AUTH_PHASE_FAST_PATH => MySQLConnectionPhase::AUTH_PHASE_FAST_PATH,
-            MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH => MySQLConnectionPhase::AUTHENTICATION_METHOD_MISMATCH
+            MySQLConnectionPhase::InitialHandshake => MySQLConnectionPhase::InitialHandshake,
+            MySQLConnectionPhase::AuthPhaseFastPath => MySQLConnectionPhase::AuthPhaseFastPath,
+            MySQLConnectionPhase::AuthenticationMethodMismatch => MySQLConnectionPhase::AuthenticationMethodMismatch
         }
     }
 }
@@ -139,7 +140,7 @@ pub struct PrepareStatementContext {
     parameters_count: u16,
     columns_count: u16,
     sql: Vec<u8>,
-    parameter_types: Vec<(u8, u8)>
+    parameter_types: Vec<(u8, u8)>,
 }
 
 impl PrepareStatementContext {
@@ -152,7 +153,7 @@ impl PrepareStatementContext {
             parameters_count,
             columns_count,
             sql,
-            parameter_types: vec![]
+            parameter_types: vec![],
         }
     }
 
@@ -179,7 +180,6 @@ impl PrepareStatementContext {
     pub fn set_parameter_types(&mut self, parameter_types: Vec<(u8, u8)>) {
         self.parameter_types = parameter_types;
     }
-
 }
 
 lazy_static! {
@@ -192,11 +192,12 @@ pub fn session_prepare_stmt_context_statement_id() -> u64 {
 
 #[cfg(test)]
 mod session_tests {
-    use lazy_static::lazy_static;
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use std::thread;
     use std::time::Duration;
+
+    use lazy_static::lazy_static;
 
     #[derive(Default, Debug, Clone)]
     pub struct Operator {
@@ -206,13 +207,13 @@ mod session_tests {
     #[derive(Default, Debug, Clone)]
     pub struct Transaction {
         id: u64,
-        attrs: Vec<Operator>
+        attrs: Vec<Operator>,
     }
 
     #[derive(Default, Debug, Clone)]
     pub struct Session {
         id: u64,
-        transaction: Transaction
+        transaction: Transaction,
     }
 
     #[derive(Default, Debug, Clone)]
@@ -241,13 +242,13 @@ mod session_tests {
 
         let session: Session = Session {
             id: 1,
-            transaction: Default::default()
+            transaction: Default::default(),
         };
         sm.sessions.insert(1, session);
 
         let session: Session = Session {
             id: 2,
-            transaction: Default::default()
+            transaction: Default::default(),
         };
         sm.sessions.insert(2, session);
 

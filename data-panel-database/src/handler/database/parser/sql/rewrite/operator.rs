@@ -10,10 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+use std::fmt::Write;
+
 use sqlparser::ast::{BinaryOperator, UnaryOperator};
 
-use std::fmt::Write;
-use std::collections::HashMap;
 use crate::handler::database::parser::sql::rewrite::SQLReWrite;
 
 pub type SRWResult = data_panel_common::common::Result<()>;

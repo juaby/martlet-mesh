@@ -1,6 +1,6 @@
 use crate::protocol::database::DatabasePacket;
-use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload, MySQLPacket};
-use crate::protocol::database::mysql::constant::{MySQLColumnType, MySQLNewParametersBoundFlag, MySQLColumnFlags};
+use crate::protocol::database::mysql::constant::{MySQLColumnFlags, MySQLColumnType, MySQLNewParametersBoundFlag};
+use crate::protocol::database::mysql::packet::{MySQLPacket, MySQLPacketHeader, MySQLPacketPayload};
 use crate::session::mysql::SessionContext;
 
 /**
@@ -10,7 +10,8 @@ use crate::session::mysql::SessionContext;
  */
 pub struct MySQLComStmtPreparePacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
+    /// MySQLCommandPacketType,
+    command_type: u8,
     sql: Vec<u8>,
 }
 
@@ -33,7 +34,7 @@ impl MySQLComStmtPreparePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComStmtPreparePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         let bytes = payload.get_remaining_bytes();
         this.sql = Vec::from(bytes.as_slice());
         this
@@ -53,7 +54,8 @@ impl MySQLPacket for MySQLComStmtPreparePacket {
  */
 pub struct MySQLComStmtPrepareOKPacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
+    /// MySQLCommandPacketType,
+    command_type: u8,
     status: u8,
     statement_id: u32,
     columns_count: u16,
@@ -81,7 +83,7 @@ impl MySQLComStmtPrepareOKPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComStmtPrepareOKPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(this.status);
         payload.put_u32_le(this.statement_id);
@@ -107,14 +109,15 @@ impl MySQLPacket for MySQLComStmtPrepareOKPacket {
  */
 pub struct MySQLComStmtExecutePacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
+    /// MySQLCommandPacketType,
+    command_type: u8,
     statement_id: u32,
     flags: u16,
     null_bit_map: Vec<u8>,
     new_parameters_bound_flag: u8,
     iteration_count: u32,
     sql: Vec<u8>,
-    parameters: Vec<PrepareParamValue>
+    parameters: Vec<PrepareParamValue>,
 }
 
 impl MySQLComStmtExecutePacket {
@@ -128,7 +131,7 @@ impl MySQLComStmtExecutePacket {
             new_parameters_bound_flag: 0,
             iteration_count: 0,
             sql: vec![],
-            parameters: vec![]
+            parameters: vec![],
         }
     }
 
@@ -154,7 +157,7 @@ impl MySQLComStmtExecutePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComStmtExecutePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
         this.sql = session_ctx.get_prepare_stmt_ctx_by_id(this.statement_id as u64).unwrap().get_sql();
@@ -227,7 +230,7 @@ impl MySQLBinaryResultSetRowPacket {
     pub fn new(sequence_id: u32, data: Vec<PrepareParamValue>) -> Self {
         MySQLBinaryResultSetRowPacket {
             sequence_id: sequence_id,
-            data: data
+            data: data,
         }
     }
 }
@@ -239,7 +242,7 @@ impl MySQLPacket for MySQLBinaryResultSetRowPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLBinaryResultSetRowPacket {
-    fn encode<'p,'d>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
+    fn encode<'p, 'd>(this: &'d mut Self, payload: &'p mut MySQLPacketPayload) -> &'p mut MySQLPacketPayload {
         payload.put_u8(this.get_sequence_id() as u8); // seq
         payload.put_u8(0x00); // PACKET_HEADER
 
@@ -277,7 +280,8 @@ impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for M
  */
 pub struct MySQLComStmtClosePacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
+    /// MySQLCommandPacketType,
+    command_type: u8,
     statement_id: u32,
 }
 
@@ -296,7 +300,7 @@ impl MySQLComStmtClosePacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComStmtClosePacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
 
@@ -317,7 +321,8 @@ impl MySQLPacket for MySQLComStmtClosePacket {
  */
 pub struct MySQLComStmtResetPacket {
     sequence_id: u32,
-    command_type: u8, // MySQLCommandPacketType,
+    /// MySQLCommandPacketType,
+    command_type: u8,
     statement_id: u32,
 }
 
@@ -336,7 +341,7 @@ impl MySQLComStmtResetPacket {
 }
 
 impl DatabasePacket<MySQLPacketHeader, MySQLPacketPayload, SessionContext> for MySQLComStmtResetPacket {
-    fn decode<'p,'d>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
+    fn decode<'p, 'd>(this: &'d mut Self, header: &'p MySQLPacketHeader, payload: &'p mut MySQLPacketPayload, session_ctx: &mut SessionContext) -> &'d mut Self {
         this.sequence_id = header.sequence_id;
         this.statement_id = payload.get_uint_le(4) as u32;
 

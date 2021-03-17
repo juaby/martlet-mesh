@@ -10,14 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use sqlparser::ast::{Values, Fetch, OrderByExpr, JoinOperator, JoinConstraint, Join, TableAlias, TableFactor, TableWithJoins, SelectItem, Cte, Select, SetOperator, SetExpr, Query, With, Offset, OffsetRows, Top};
-
-use std::fmt::Write;
 use std::collections::HashMap;
+use std::fmt::Write;
 
-pub type SRWResult = data_panel_common::common::Result<()>;
+use sqlparser::ast::{Cte, Fetch, Join, JoinConstraint, JoinOperator, Offset, OffsetRows, OrderByExpr, Query, Select, SelectItem, SetExpr, SetOperator, TableAlias, TableFactor, TableWithJoins, Top, Values, With};
 
 use crate::handler::database::parser::sql::rewrite::{display_comma_separated, SQLReWrite};
+
+pub type SRWResult = data_panel_common::common::Result<()>;
 
 /// The most complete variant of a `SELECT` query expression, optionally
 /// including `WITH`, `UNION` / other set operations, and `ORDER BY`.
@@ -54,16 +54,16 @@ impl SQLReWrite for SetExpr {
         match self {
             SetExpr::Select(s) => {
                 s.rewrite(f, ctx)?;
-            },
+            }
             SetExpr::Query(q) => {
                 q.rewrite(f, ctx)?;
-            },
+            }
             SetExpr::Values(v) => {
                 v.rewrite(f, ctx)?;
-            },
+            }
             SetExpr::Insert(v) => {
                 v.rewrite(f, ctx)?;
-            },
+            }
             SetExpr::SetOperation {
                 left,
                 right,
@@ -158,19 +158,19 @@ impl SQLReWrite for SelectItem {
         match &self {
             SelectItem::UnnamedExpr(expr) => {
                 expr.rewrite(f, ctx)?;
-            },
+            }
             SelectItem::ExprWithAlias { expr, alias } => {
                 expr.rewrite(f, ctx)?;
                 write!(f, " AS ")?;
                 alias.rewrite(f, ctx)?;
-            },
+            }
             SelectItem::QualifiedWildcard(prefix) => {
                 prefix.rewrite(f, ctx)?;
                 write!(f, ".*")?;
-            },
+            }
             SelectItem::Wildcard => {
                 write!(f, "*")?;
-            },
+            }
         }
         Ok(())
     }
@@ -245,7 +245,7 @@ impl SQLReWrite for TableFactor {
                 table_reference.rewrite(f, ctx)?;
                 write!(f, ")")?;
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -279,7 +279,7 @@ impl SQLReWrite for Join {
                             write!(f, " ON ")?;
                             expr.rewrite(f, ctx)?;
                             Ok(())
-                        },
+                        }
                         JoinConstraint::Using(attrs) => {
                             write!(f, " USING(")?;
                             display_comma_separated(attrs).rewrite(f, ctx)?;
@@ -301,7 +301,7 @@ impl SQLReWrite for Join {
                 )?;
                 self.relation.rewrite(f, ctx)?;
                 suffix(constraint).rewrite(f, ctx)?;
-            },
+            }
             JoinOperator::LeftOuter(constraint) => {
                 write!(
                     f,
@@ -310,7 +310,7 @@ impl SQLReWrite for Join {
                 )?;
                 self.relation.rewrite(f, ctx)?;
                 suffix(constraint).rewrite(f, ctx)?;
-            },
+            }
             JoinOperator::RightOuter(constraint) => {
                 write!(
                     f,
@@ -319,7 +319,7 @@ impl SQLReWrite for Join {
                 )?;
                 self.relation.rewrite(f, ctx)?;
                 suffix(constraint).rewrite(f, ctx)?;
-            },
+            }
             JoinOperator::FullOuter(constraint) => {
                 write!(
                     f,
@@ -328,19 +328,19 @@ impl SQLReWrite for Join {
                 )?;
                 self.relation.rewrite(f, ctx)?;
                 suffix(constraint).rewrite(f, ctx)?;
-            },
+            }
             JoinOperator::CrossJoin => {
                 write!(f, " CROSS JOIN ")?;
                 self.relation.rewrite(f, ctx)?;
-            },
+            }
             JoinOperator::CrossApply => {
                 write!(f, " CROSS APPLY ")?;
                 self.relation.rewrite(f, ctx)?;
-            },
+            }
             JoinOperator::OuterApply => {
                 write!(f, " OUTER APPLY ")?;
                 self.relation.rewrite(f, ctx)?;
-            },
+            }
         }
         Ok(())
     }
@@ -390,7 +390,7 @@ impl SQLReWrite for Fetch {
             let percent = if self.percent { " PERCENT" } else { "" };
             write!(f, "FETCH FIRST ")?;
             quantity.rewrite(f, ctx)?;
-            write!(f, "{} ROWS {}",  percent, extension)?;
+            write!(f, "{} ROWS {}", percent, extension)?;
         } else {
             write!(f, "FETCH FIRST ROWS {}", extension)?;
         }

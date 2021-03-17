@@ -1,11 +1,11 @@
-use sqlparser::dialect::{Dialect};
+use sqlparser::ast::{Ident, Statement};
+use sqlparser::dialect::Dialect;
 use sqlparser::parser::Parser;
-use sqlparser::ast::{Statement, Ident, SetVariableValue};
 
 #[derive(Debug)]
-pub struct MySqlDialect {}
+pub struct MySQLDialect {}
 
-impl Dialect for MySqlDialect {
+impl Dialect for MySQLDialect {
     fn is_identifier_start(&self, ch: char) -> bool {
         // See https://dev.mysql.com/doc/refman/8.0/en/identifiers.html.
         // We don't yet support identifiers beginning with numbers, as that
@@ -15,6 +15,7 @@ impl Dialect for MySqlDialect {
             || ch == '_'
             || ch == '$'
             || ch == '@'
+            || ch == '?'
             || ('\u{0080}'..='\u{ffff}').contains(&ch)
     }
 
@@ -28,14 +29,14 @@ impl Dialect for MySqlDialect {
 }
 
 pub fn parser(sql: String) -> Vec<Statement> {
-    let dialect = MySqlDialect {}; // or AnsiDialect, or your own dialect ...
+    let dialect = MySQLDialect {}; // or AnsiDialect, or your own dialect ...
 
     let ast = if sql.to_uppercase().starts_with("XSET NAMES") {
         vec![Statement::SetVariable {
             local: false,
             hivevar: false,
             variable: Ident { value: "".to_string(), quote_style: None },
-            value: vec![]
+            value: vec![],
         }]
     } else {
         Parser::parse_sql(&dialect, &sql).unwrap()

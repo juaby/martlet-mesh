@@ -1,24 +1,25 @@
-use crate::handler::database::mysql::CommandHandler;
-use crate::protocol::database::mysql::packet::{MySQLPacketPayload, MySQLPacketHeader};
-use crate::protocol::database::{DatabasePacket};
-use crate::handler::database::parser;
 use bytes::Bytes;
 
-use crate::protocol::database::mysql::packet::text::{MySQLComQueryPacket};
-use crate::handler::database::mysql::explainplan::{ExplainPlanContext, ExplainPlan, TBProtocol, Executor};
+use crate::handler::database::mysql::CommandHandler;
+use crate::handler::database::mysql::explainplan::{Executor, ExplainPlan, ExplainPlanContext, TBProtocol};
+use crate::handler::database::parser;
+use crate::protocol::database::DatabasePacket;
+use crate::protocol::database::mysql::packet::{MySQLPacketHeader, MySQLPacketPayload};
+use crate::protocol::database::mysql::packet::text::MySQLComQueryPacket;
 use crate::session::mysql::SessionContext;
 
 pub struct ComQueryHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for ComQueryHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet_payload: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
-        /// 1 解析報文
-        /// 2 解析SQL
-        /// 3 服務發現
-        /// 4 SQL重寫
-        /// 5 執行上下文
-        /// 6 執行SQL
-        /// 7 合并結果
-        /// 8 封裝報文
+        // 1 解析報文
+        // 2 解析SQL
+        // 3 服務發現
+        // 4 SQL重寫
+        // 5 執行上下文
+        // 6 執行SQL
+        // 7 合并結果
+        // 8 封裝報文
         let command_packet_header = command_packet_header.unwrap();
         let command_packet_type = command_packet_header.get_command_packet_type();
         let mut command_payload = command_packet_payload.unwrap();
@@ -41,6 +42,7 @@ impl CommandHandler<MySQLPacketPayload, SessionContext> for ComQueryHandler {
 }
 
 pub struct SetVariableHandler {}
+
 impl CommandHandler<MySQLPacketPayload, SessionContext> for SetVariableHandler {
     fn handle(command_packet_header: Option<MySQLPacketHeader>, command_packet: Option<MySQLPacketPayload>, session_ctx: &mut SessionContext) -> Option<Vec<Bytes>> {
         unimplemented!()

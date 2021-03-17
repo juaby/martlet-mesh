@@ -1,9 +1,11 @@
-use tokio::io::{AsyncWrite, AsyncRead};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tokio_util::codec::LengthDelimitedCodec;
+
 use data_panel_common::service::ServiceCodec;
 
 pub struct MySQLCodec {}
+
 impl ServiceCodec for MySQLCodec {
     fn write_frame<T: AsyncWrite>(&self, io: T) -> FramedWrite<T, LengthDelimitedCodec> {
         LengthDelimitedCodec::builder()
